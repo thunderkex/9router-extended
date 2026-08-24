@@ -71,88 +71,81 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Quick Start & Installation
 
-### 1. Install 9Router Extended (`v0.5.55-extended`)
+### 🚀 1. Install 9Router Extended
 
-Choose your preferred installation method:
-
-#### 📦 Method 1: Install from GitHub Release (Recommended)
+Choose the fastest method for your environment:
 
 ```bash
-# Install pre-built 9Router Extended release tarball
+# 📦 Option A: Install directly from GitHub Release (Always Latest)
+npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+
+# (Or install specific release tag, e.g. v0.5.55-extended)
 npm install -g https://github.com/thunderkex/9router-extended/releases/download/v0.5.55-extended/9router-0.5.55-extended.tgz
 
-# (Or if using thunderkex/9router repository)
-npm install -g https://github.com/thunderkex/9router/releases/download/v0.5.55-extended/9router-0.5.55-extended.tgz
-```
-
-#### 🌿 Method 2: Install directly from Git Branch
-
-```bash
+# 🌿 Option B: Install live from GitHub repository branch
 npm install -g git+https://github.com/thunderkex/9router-extended.git#extended
-# Or
-npm install -g git+https://github.com/thunderkex/9router.git#extended
+
+# ⚡ Option C: Run instantly with Bun (Zero Global Install)
+bunx --bun git+https://github.com/thunderkex/9router-extended.git#extended
 ```
 
-#### 🛠️ Method 3: Build & Install Locally from Source
+<details>
+<summary>🛠️ <b>Build & Install Locally from Source</b></summary>
 
 ```bash
-# Clone the extended branch
-git clone -b extended https://github.com/thunderkex/9router.git
-cd 9router
+# Clone repository
+git clone -b extended https://github.com/thunderkex/9router-extended.git
+cd 9router-extended
 
-# Install dependencies and build
+# Install dependencies and build bundle
 npm install
 cd cli && npm install
 npm run pack:cli
 
-# Install the generated package globally
-npm install -g ../9router-0.5.55-extended.tgz
+# Install generated package globally
+npm install -g ../9router-*.tgz
 ```
+</details>
 
 ---
 
-### 2. Verify & Start 9Router
+### 🚦 2. Start & Verify
 
 ```bash
-# Verify version
+# Check version (Should output 0.5.55-extended)
 9router --version
-# Output: 0.5.55-extended
 
-# Launch interactive UI or background service
+# Start 9Router
 9router
 ```
 
-🎉 Dashboard opens automatically at `http://localhost:20128`  
-✨ Access **9Router Extended Hub & Studio** at `http://localhost:20128/dashboard/extended`
+- 🌐 **Dashboard:** [`http://localhost:20128`](http://localhost:20128)
+- 🧩 **9Router Extended Hub:** [`http://localhost:20128/dashboard/extended`](http://localhost:20128/dashboard/extended)
+- 🔌 **OpenAI-Compatible API:** `http://localhost:20128/v1`
 
 ---
 
-### 3. Connect a FREE Provider (no signup needed):
+### 🎁 3. Connect a Free Provider (No Signup Needed)
 
-Dashboard → Providers → Connect **Kiro AI** (~50 credits/month free: Claude 4.5 + GLM-5 + MiniMax) or **OpenCode Free** (no auth) → Done!
+1. Open **Dashboard** → **Providers**
+2. Click **Connect** on **Kiro AI** (~50 credits/month free: Claude 4.5 + GLM-5 + MiniMax) or **OpenCode Free** (no auth).
 
 ---
 
-### 4. Connect Your AI Coding Tools:
+### 💻 4. Configure Your AI Coding Tools
 
-```
-Claude Code / Codex / OpenClaw / Cursor / Cline / Antigravity Settings:
+Point your AI coding tools to 9Router:
+
+```yaml
+Claude Code / Codex / OpenClaw / Cursor / Cline / Antigravity:
   Endpoint: http://localhost:20128/v1
-  API Key: [copy from dashboard]
-  Model: kr/claude-sonnet-4.5
+  API Key: [copy from 9router dashboard]
+  Model: kr/claude-sonnet-4.5 # Or any combo/alias configured
 ```
 
-**That's it!** Start coding with full Token Saver compression & 9Router Extended custom rules.
-
----
-
-Default URLs:
-
-- Dashboard: `http://localhost:20128/dashboard`
-- Extended Hub & Studio: `http://localhost:20128/dashboard/extended`
-- OpenAI-compatible API: `http://localhost:20128/v1`
+**That's it!** All requests are now routed, compressed with Token Savers, and enhanced with 9Router Extended dynamic skills.
 
 ---
 
