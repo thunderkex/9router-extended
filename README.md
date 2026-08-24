@@ -741,7 +741,11 @@ Seamless translation between formats:
 
 ### 🧩 9Router Extended & Pluggable Skill Registry
 
-9Router features a dedicated **9Router Extended** hub and a manifest-driven **Skill Registry** that makes it infinitely extensible.
+9Router features a dedicated **9Router Extended** hub and a manifest-driven **Skill Registry** that makes it infinitely extensible with community rules, design guidelines, agent CLI modules, and dynamic prompt interpolations.
+
+<div align="center">
+  <img src="./images/extended-hub.png" alt="9Router Extended Hub" width="800"/>
+</div>
 
 #### 1. Core Token Savers vs. 9Router Extended
 
@@ -809,6 +813,10 @@ Any skill with `"hook": "system-prompt"` can define dynamic configuration parame
 #### 3. Creating Custom Skills via the UI Studio
 
 You can create new skills directly from **Dashboard → 9Router Extended → Create Custom Skill / Rule**:
+
+<div align="center">
+  <img src="./images/extended-studio-modal.png" alt="9Router Custom Skill & Rule Studio Modal" width="800"/>
+</div>
 
 - **System Prompt / Rule Injector (`system-prompt`):** Injects custom rules, style guides, or security directives with dynamic sliders.
 - **Agent CLI Tool (`install-cli`):** Integrates external CLI tools (e.g. MCP packages) with 1-click Install/Uninstall management.
