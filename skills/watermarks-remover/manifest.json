@@ -1,0 +1,9 @@
+{
+  "id": "watermarks-remover",
+  "name": "Watermarks Remover",
+  "description": "Strip AI provenance marks (invisible Unicode, C2PA) and AI transition clichés from outputs.",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "default_enabled": true,
+  "source": "https://github.com/guillaumemeyer/watermarks-remover"
+}

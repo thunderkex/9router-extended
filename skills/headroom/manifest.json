@@ -1,0 +1,19 @@
+{
+  "id": "headroom",
+  "name": "Headroom",
+  "description": "Compress context via external /v1/compress proxy before routing to the model",
+  "category": "compression",
+  "hook": "pre-request",
+  "default_enabled": false,
+  "legacy_enabled_key": "headroomEnabled",
+  "source": "https://github.com/chopratejas/headroom",
+  "config_schema": [
+    {
+      "key": "endpoint",
+      "type": "string",
+      "label": "Proxy URL",
+      "default": "http://localhost:8787",
+      "legacy_key": "headroomUrl"
+    }
+  ]
+}

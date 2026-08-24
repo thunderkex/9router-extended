@@ -1,0 +1,11 @@
+{
+  "id": "graphify",
+  "name": "Graphify",
+  "description": "Codebase → knowledge-graph agent-skill. Turns any input into a persistent knowledge graph.",
+  "category": "agent-skill",
+  "hook": "install-cli",
+  "default_enabled": false,
+  "install_command": "uv tool install graphifyy && graphify install",
+  "uninstall_command": "graphify uninstall",
+  "source": "https://github.com/Graphify-Labs/graphify"
+}

@@ -1,0 +1,7 @@
+# Text Hygiene & AI Provenance Removal Instructions
+
+On every response, file modification, and generated text/code:
+1. Zero Invisible Unicode / Watermarks: Never output invisible Unicode markers, zero-width spaces (U+200B), zero-width joiners/non-joiners (U+200C, U+200D, U+FEFF), soft hyphens (U+00AD), or exotic bidi override control characters.
+2. Metadata & Container Hygiene: Ensure all created and saved files (Markdown, HTML, documents, images) have clean metadata without AI generation tags, C2PA signatures, or model provenance headers.
+3. Natural Human Phrasing: For all written prose, documentation, commit messages, and natural language text, write varied, direct, human-style phrasing. Avoid robotic, formulaic AI transition clichés (e.g., "In summary", "Crucial aspect", "Testament to", "Delve into").
+4. Code Integrity: When editing source code, maintain exact functional correctness while keeping comments and docstrings natural and free of watermark characters.

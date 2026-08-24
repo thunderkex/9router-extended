@@ -1,0 +1,10 @@
+{
+  "id": "rtk",
+  "name": "RTK",
+  "description": "Compress tool output (git/grep/ls/tree/logs → 60-90% fewer input tokens)",
+  "category": "compression",
+  "hook": "pre-request",
+  "default_enabled": true,
+  "legacy_enabled_key": "rtkEnabled",
+  "source": "https://github.com/rtk-ai/rtk"
+}

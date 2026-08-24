@@ -1,0 +1,10 @@
+{
+  "id": "commit-lint",
+  "name": "Commit Lint",
+  "description": "Injects a strict Conventional Commits prompt into the system prompt. Enforces repository standards.",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "default_enabled": false,
+  "source": "https://github.com/conventional-changelog/commitlint",
+  "prompt_template": "You must format all commit messages according to the Conventional Commits specification. Use type(scope): subject format."
+}

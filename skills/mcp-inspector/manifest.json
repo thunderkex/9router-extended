@@ -1,0 +1,11 @@
+{
+  "id": "mcp-inspector",
+  "name": "MCP Inspector",
+  "description": "Installs the Model Context Protocol inspector. Real adoption for debugging context usage.",
+  "category": "agent-skill",
+  "hook": "install-cli",
+  "default_enabled": false,
+  "install_command": "npm install -g @modelcontextprotocol/inspector",
+  "uninstall_command": "npm uninstall -g @modelcontextprotocol/inspector",
+  "source": "https://github.com/modelcontextprotocol/inspector"
+}
