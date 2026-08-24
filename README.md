@@ -73,50 +73,85 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 
 ## ⚡ Quick Start
 
-**1. Install globally:**
+### 1. Install 9Router Extended (`v0.5.55-extended`)
+
+Choose your preferred installation method:
+
+#### 📦 Method 1: Install from GitHub Release (Recommended)
 
 ```bash
-npm install -g 9router
+# Install pre-built 9Router Extended release tarball
+npm install -g https://github.com/thunderkex/9router-extended/releases/download/v0.5.55-extended/9router-0.5.55-extended.tgz
+
+# (Or if using thunderkex/9router repository)
+npm install -g https://github.com/thunderkex/9router/releases/download/v0.5.55-extended/9router-0.5.55-extended.tgz
+```
+
+#### 🌿 Method 2: Install directly from Git Branch
+
+```bash
+npm install -g git+https://github.com/thunderkex/9router-extended.git#extended
+# Or
+npm install -g git+https://github.com/thunderkex/9router.git#extended
+```
+
+#### 🛠️ Method 3: Build & Install Locally from Source
+
+```bash
+# Clone the extended branch
+git clone -b extended https://github.com/thunderkex/9router.git
+cd 9router
+
+# Install dependencies and build
+npm install
+cd cli && npm install
+npm run pack:cli
+
+# Install the generated package globally
+npm install -g ../9router-0.5.55-extended.tgz
+```
+
+---
+
+### 2. Verify & Start 9Router
+
+```bash
+# Verify version
+9router --version
+# Output: 0.5.55-extended
+
+# Launch interactive UI or background service
 9router
 ```
 
-🎉 Dashboard opens at `http://localhost:20128`
+🎉 Dashboard opens automatically at `http://localhost:20128`  
+✨ Access **9Router Extended Hub & Studio** at `http://localhost:20128/dashboard/extended`
 
-**2. Connect a FREE provider (no signup needed):**
+---
+
+### 3. Connect a FREE Provider (no signup needed):
 
 Dashboard → Providers → Connect **Kiro AI** (~50 credits/month free: Claude 4.5 + GLM-5 + MiniMax) or **OpenCode Free** (no auth) → Done!
 
-**3. Use in your CLI tool:**
+---
+
+### 4. Connect Your AI Coding Tools:
 
 ```
-Claude Code/Codex/OpenClaw/Cursor/Cline Settings:
+Claude Code / Codex / OpenClaw / Cursor / Cline / Antigravity Settings:
   Endpoint: http://localhost:20128/v1
   API Key: [copy from dashboard]
   Model: kr/claude-sonnet-4.5
 ```
 
-**That's it!** Start coding with FREE AI models.
+**That's it!** Start coding with full Token Saver compression & 9Router Extended custom rules.
 
-**Alternative: run from source (this repository):**
-
-This repository package is private (`9router-app`), so source/Docker execution is the expected local development path.
-
-```bash
-cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
-```
-
-Production mode:
-
-```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
-```
+---
 
 Default URLs:
 
 - Dashboard: `http://localhost:20128/dashboard`
+- Extended Hub & Studio: `http://localhost:20128/dashboard/extended`
 - OpenAI-compatible API: `http://localhost:20128/v1`
 
 ---
