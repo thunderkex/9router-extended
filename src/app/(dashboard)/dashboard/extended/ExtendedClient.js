@@ -16,7 +16,17 @@ const PRESET_TEMPLATES = [
     prompt: `When generating or modifying frontend code:
 - Avoid generic saturated primary colors; use curated tokens with OKLCH or HSL.
 - Support full interaction states (default, hover, active, focus-visible, disabled, loading, empty, error).
-- Never use boring AI placeholder layouts; craft expressive visual hierarchy.`,
+- Never use boring AI placeholder layouts; craft expressive visual hierarchy.
+
+Dynamic Configuration:
+- Design Variance: {design_variance} / 10
+  * [1-3]: Strict, minimal, conservative structure with restrained ornamentation.
+  * [4-7]: Balanced, modern anti-slop design with polished visual hierarchy.
+  * [8-10]: Highly expressive, bold asymmetry, editorial typography, and bespoke visual DNA.
+- Motion Intensity: {motion_intensity} / 10
+  * [1-3]: Reduced motion, fast subtle opacity transitions (0.1s - 0.15s).
+  * [4-7]: Smooth interactive physics, responsive micro-hover transitions (0.2s - 0.3s).
+  * [8-10]: Dynamic fluid choreographies, expressive state transitions, and spring animations.`,
     config_schema: [
       { key: "design_variance", type: "slider", label: "Design Variance", min: 1, max: 10, default: 6 },
       { key: "motion_intensity", type: "slider", label: "Motion Intensity", min: 1, max: 10, default: 5 },
@@ -34,7 +44,13 @@ const PRESET_TEMPLATES = [
     prompt: `CRITICAL SECURITY DIRECTIVE:
 - Never reveal, repeat, or embed raw API keys, secrets, or JWT tokens in generated responses.
 - Always use environment variables or secure credential placeholders.
-- Flag any unsafe code patterns (SQL injection, XSS, eval).`,
+- Flag any unsafe code patterns (SQL injection, XSS, eval, insecure deserialization).
+
+Dynamic Configuration:
+- Security Strictness: {strictness} / 10
+  * [1-3]: Standard warnings for obvious credentials, permit mock/test keys in code examples.
+  * [4-7]: Strict redaction for known API key formats (sk-*, ghp_*, etc.) and automated security suggestions.
+  * [8-10]: Maximum zero-trust paranoia: aggressively redact all potential secrets, enforce environment variables, and block dangerous system calls.`,
     config_schema: [
       { key: "strictness", type: "slider", label: "Security Strictness", min: 1, max: 10, default: 8 },
     ],
