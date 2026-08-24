@@ -168,17 +168,23 @@ function buildCliPackage() {
   fs.mkdirSync(path.join(buildHomeDir, "AppData", "Roaming"), { recursive: true });
   fs.mkdirSync(path.join(buildHomeDir, "AppData", "Local"), { recursive: true });
 
-  // Step 0: Sync version from app/cli/package.json to app/package.json
+  // Step 0: Sync version from env / cli/package.json to app/package.json
   console.log("0️⃣  Syncing version to app/package.json...");
-  const cliPkg = JSON.parse(fs.readFileSync(path.join(cliDir, "package.json"), "utf8"));
+  const cliPkgPath = path.join(cliDir, "package.json");
+  const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf8"));
+  const targetVersion = (process.env.NINEROUTER_VERSION || "").replace(/^v/, "") || cliPkg.version;
+  if (cliPkg.version !== targetVersion) {
+    cliPkg.version = targetVersion;
+    fs.writeFileSync(cliPkgPath, JSON.stringify(cliPkg, null, 2) + "\n");
+  }
   const appPkgPath = path.join(appDir, "package.json");
   const appPkg = JSON.parse(fs.readFileSync(appPkgPath, "utf8"));
-  if (appPkg.version !== cliPkg.version) {
-    appPkg.version = cliPkg.version;
+  if (appPkg.version !== targetVersion) {
+    appPkg.version = targetVersion;
     fs.writeFileSync(appPkgPath, JSON.stringify(appPkg, null, 2) + "\n");
-    console.log(`✅ Version synced: ${cliPkg.version}\n`);
+    console.log(`✅ Version synced: ${targetVersion}\n`);
   } else {
-    console.log(`✅ Version already synced: ${cliPkg.version}\n`);
+    console.log(`✅ Version already synced: ${targetVersion}\n`);
   }
 
   // Step 1: Build app with Next.js (workspace tracing root → traced node_modules in standalone).

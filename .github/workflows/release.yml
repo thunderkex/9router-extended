@@ -27,6 +27,21 @@ jobs:
           node-version: 22.x
           registry-url: "https://registry.npmjs.org"
 
+      - name: Resolve Dynamic Version from Git Tag
+        id: vars
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            TAG_NAME="v$VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "NINEROUTER_VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+
       - name: Install Dependencies
         run: |
           npm install --no-audit --no-fund
@@ -36,14 +51,14 @@ jobs:
       - name: Package CLI Distribution
         run: |
           cd cli && npm run pack:cli
-        shell: bash
-
-      - name: Extract Tag or Version
-        id: vars
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          cd ..
+          # Create stable release asset aliases for persistent latest download links
+          TARBALL=$(ls 9router-*.tgz | head -n 1)
+          if [ -f "$TARBALL" ]; then
+            cp "$TARBALL" 9router-extended.tgz
+            cp "$TARBALL" 9router-latest.tgz
+          fi
+          ls -la *.tgz
         shell: bash
 
       - name: Create GitHub Release
@@ -51,11 +66,12 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           name: 9Router v${{ steps.vars.outputs.version }}
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && steps.vars.outputs.tag_name || format('v{0}', steps.vars.outputs.version) }}
+          tag_name: ${{ steps.vars.outputs.tag_name }}
           files: "*.tgz"
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(steps.vars.outputs.version, '-') }}
+          prerelease: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
