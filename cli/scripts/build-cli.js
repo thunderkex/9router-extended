@@ -40,7 +40,7 @@ function copyRecursive(src, dest) {
     console.warn(`Warning: Source ${src} does not exist`);
     return;
   }
-  
+
   if (!fs.existsSync(dest)) {
     fs.mkdirSync(dest, { recursive: true });
   }
@@ -72,11 +72,11 @@ function copyRecursive(src, dest) {
         } else {
           fs.copyFileSync(real, destPath);
         }
-      } catch {}
+      } catch { }
     } else {
       try {
         fs.copyFileSync(srcPath, destPath);
-      } catch {}
+      } catch { }
     }
   }
 }
@@ -88,22 +88,35 @@ function resolveStandaloneBuild(appDir, buildDistDir) {
     ? resolvedStandaloneRoot
     : legacyStandaloneRoot;
 
-  // Next.js 16 nests standalone output under the project name when
-  // NEXT_TRACING_ROOT_MODE=workspace, e.g. standalone/9router/server.js.
-  const pkgName = path.basename(appDir);
-  const nestedRoot = path.join(standaloneRoot, pkgName);
-  if (fs.existsSync(path.join(nestedRoot, "server.js")) && !fs.existsSync(path.join(standaloneRoot, "server.js"))) {
-    console.log(`ℹ️  Detected nested standalone output: ${pkgName}/`);
-    standaloneRoot = nestedRoot;
+  if (fs.existsSync(path.join(standaloneRoot, "server.js"))) {
+    return { standaloneApp: standaloneRoot, standaloneRoot };
   }
 
-  const standaloneApp = fs.existsSync(path.join(standaloneRoot, "server.js"))
-    ? standaloneRoot
-    : path.join(standaloneRoot, "app");
+  if (fs.existsSync(standaloneRoot)) {
+    const pkgName = path.basename(appDir);
+    const nestedRoot = path.join(standaloneRoot, pkgName);
+    if (fs.existsSync(path.join(nestedRoot, "server.js"))) {
+      console.log(`ℹ️  Detected nested standalone output: ${pkgName}/`);
+      return { standaloneApp: nestedRoot, standaloneRoot };
+    }
+
+    const entries = fs.readdirSync(standaloneRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const candidate = path.join(standaloneRoot, entry.name);
+        if (fs.existsSync(path.join(candidate, "server.js"))) {
+          console.log(`ℹ️  Detected nested standalone output: ${entry.name}/`);
+          return { standaloneApp: candidate, standaloneRoot };
+        }
+      }
+    }
+  }
+
+  const standaloneApp = path.join(standaloneRoot, "app");
   if (!fs.existsSync(standaloneApp)) {
     throw new Error(
       "Next.js standalone build not found under .next/standalone; " +
-      "expected either .next/standalone/server.js or .next/standalone/app/",
+      "expected either .next/standalone/server.js or .next/standalone/<pkg>/server.js",
     );
   }
 
@@ -170,8 +183,9 @@ function buildCliPackage() {
 
   // Step 1: Build app with Next.js (workspace tracing root → traced node_modules in standalone).
   console.log("1️⃣  Building Next.js app...");
+  const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
   try {
-    execSync("npm run build", {
+    execSync(`${npmCmd} run build`, {
       stdio: "inherit",
       cwd: appDir,
       env: {
