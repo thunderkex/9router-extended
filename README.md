@@ -130,6 +130,47 @@ npm install -g ../9router-*.tgz
 
 ---
 
+### 🔄 How to Update Existing Installation
+
+#### Option 1: Update from GitHub Releases (Online)
+
+```bash
+# ⚡ For Bun (clear cache & reinstall latest):
+bun pm cache rm
+bun remove -g 9router
+bun add -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+
+# 📦 For NPM:
+npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --prefer-online
+
+# 🌿 For Live Git Branch:
+npm install -g git+https://github.com/thunderkex/9router-extended.git#extended
+```
+
+#### Option 2: Update from Local Source (Development)
+
+If you made modifications to the source code locally and want to install your updated version:
+
+```bash
+# In the project root:
+npm run build
+cd cli && npm run pack:cli
+cd ..
+
+# Install local package:
+bun remove -g 9router
+bun add -g ./9router-*.tgz
+# (or with npm: npm install -g ./9router-*.tgz)
+```
+
+> 💡 **Interactive Updates:** When you run `9router` in terminal, it automatically checks for new releases and gives you a 1-click update option directly in the interactive menu.
+>
+> 💡 **Applying Updates to Dashboard:**
+> - **Restart Server:** If 9Router is currently running in the background/tray, restart it so the updated runtime bundle is loaded.
+> - **Browser Cache:** After updating, perform a hard refresh (**`Ctrl + F5`** / **`Shift + Reload`**) on the Web Dashboard (`http://localhost:20128/dashboard`) to load the newly compiled frontend chunks immediately.
+
+---
+
 ### 🎁 3. Connect a Free Provider (No Signup Needed)
 
 1. Open **Dashboard** → **Providers**
