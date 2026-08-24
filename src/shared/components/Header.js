@@ -113,6 +113,13 @@ const getPageInfo = (pathname) => {
       icon: "security",
       breadcrumbs: [],
     };
+  if (pathname.includes("/extended"))
+    return {
+      title: "9Router Extended",
+      description: "Custom rules, prompt injectors, and dynamic agent skills",
+      icon: "auto_awesome",
+      breadcrumbs: [],
+    };
   if (pathname.includes("/token-saver"))
     return {
       title: "Token Saver",

@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./images/9router.png?1" alt="9Router Dashboard" width="800"/>
   
-  # 9Router - FREE AI Router & Token Saver
+# 9Router - FREE AI Router & Token Saver
   
   **Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
   
@@ -517,6 +517,7 @@ a third party under a provider named "Self-hosted".
 | 🧠 **Headroom Token Saver** ([Headroom](https://github.com/chopratejas/headroom)) | Optional external `/v1/compress` proxy before provider routing                           | Save more context tokens without changing clients |
 | 🪨 **Caveman Mode** ([Caveman](https://github.com/JuliusBrussee/caveman) ⭐52K)   | Inject caveman-speak prompt → LLM replies terse, technical substance preserved           | Save **up to 65% output tokens**                  |
 | 🐴 **Ponytail** ([Ponytail](https://github.com/DietrichGebert/ponytail))          | Inject "lazy senior dev" prompt → LLM writes minimal, YAGNI-first code (Lite/Full/Ultra) | **Fewer output tokens, less refactoring**         |
+| 🧩 **9Router Extended**                                                           | Custom rules, prompt injectors, and extensible Agent Skills      | **Infinitely customizable**                       |
 | 🎯 **Smart 3-Tier Fallback**                                                      | Auto-route: Subscription → Cheap → Free                                                  | Never stop coding, zero downtime                  |
 | 📊 **Real-Time Quota Tracking**                                                   | Live token count + reset countdown                                                       | Maximize subscription value                       |
 | 🔄 **Format Translation**                                                         | OpenAI ↔ Claude ↔ Gemini ↔ Cursor ↔ Kiro ↔ Vertex                                        | Works with any CLI tool                           |
@@ -707,6 +708,84 @@ Seamless translation between formats:
  |                     | Vertex AI             | $300 credits | New GCP accounts | Gemini 3 Pro + DeepSeek + GLM-5 (use Vertex AI Studio endpoint for free credits) |
 
 **💡 Pro Tip:** RTK + Kiro AI + OpenCode Free combo = **$0 cost + 20-40% token savings**!
+
+---
+
+### 🧩 9Router Extended & Pluggable Skill Registry
+
+9Router features a dedicated **9Router Extended** hub and a manifest-driven **Skill Registry** that makes it infinitely extensible.
+
+#### 1. Core Token Savers vs. 9Router Extended
+
+| Category | Location in Dashboard | Included Modules | Functionality |
+| :--- | :--- | :--- | :--- |
+| ⚡ **Token Saver** | `Dashboard → Token Saver` | **RTK**, **Headroom**, **Caveman Mode**, **Ponytail**, **Watermarks Remover**, **PXPIPE** | Native, pre-configured input/output token compression & hygiene. |
+| ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, & **Custom User Skills** | Pluggable community rules, aesthetic guidelines, dynamic sliders, and agent tools. |
+
+---
+
+#### 2. How Sliders Work with Prompts (Dynamic Parameter Interpolation)
+
+Any skill with `"hook": "system-prompt"` can define dynamic configuration parameters in its `manifest.json`.
+
+```json
+{
+  "id": "taste-skill",
+  "name": "Taste Skill",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "config_schema": [
+    {
+      "key": "design_variance",
+      "type": "slider",
+      "label": "Design Variance",
+      "min": 1,
+      "max": 10,
+      "default": 5
+    },
+    {
+      "key": "motion_intensity",
+      "type": "slider",
+      "label": "Motion Intensity",
+      "min": 1,
+      "max": 10,
+      "default": 5
+    }
+  ]
+}
+```
+
+##### How 9Router Connects the Slider to the LLM
+
+1. **Interactive Dashboard Controls:** In `Dashboard → 9Router Extended`, each parameter is rendered with a modern `ConfigSlider` with real-time gradient tracking, snap presets (`Min`, `Low`, `Default`, `High`, `Max`), and live value badges.
+2. **Instant State Persistence:** Adjusting a slider writes its exact value directly to the 9Router SQLite database in real-time.
+3. **Template Variable Interpolation:** In your skill's `prompt.txt` or `prompt.md`, you can use `{key_name}` placeholders:
+
+   ```markdown
+   Dynamic Configuration:
+   - Design Variance: {design_variance} / 10
+     * [1-3]: Minimal, conservative structure.
+     * [4-7]: Balanced, modern anti-slop design (Standard).
+     * [8-10]: Highly expressive, bespoke editorial typography.
+   - Motion Intensity: {motion_intensity} / 10
+     * [1-3]: Reduced motion, subtle opacity transitions.
+     * [4-7]: Smooth interactive micro-hover physics.
+     * [8-10]: Dynamic fluid choreographies and spring animations.
+   ```
+
+4. **Runtime Prompt Injection:** When a request is dispatched to any provider (Claude, OpenAI, Gemini, Codex, Cursor, etc.), 9Router automatically replaces `{design_variance}` and `{motion_intensity}` with your active slider numbers before injecting into the system prompt.
+5. **Automatic Fallback:** If your prompt does not contain `{key_name}` placeholders, 9Router automatically appends an `Active Configuration:` block with every slider key and scale to ensure the model always respects your settings.
+
+---
+
+#### 3. Creating Custom Skills via the UI Studio
+
+You can create new skills directly from **Dashboard → 9Router Extended → Create Custom Skill / Rule**:
+
+- **System Prompt / Rule Injector (`system-prompt`):** Injects custom rules, style guides, or security directives with dynamic sliders.
+- **Agent CLI Tool (`install-cli`):** Integrates external CLI tools (e.g. MCP packages) with 1-click Install/Uninstall management.
+- **1-Click Starter Templates:** Pre-configured templates for UI Design Taste, Security & Privacy Guard, and MCP Tools.
+- **Live Manifest Inspector:** Preview the generated `manifest.json` before saving.
 
 ---
 
@@ -1254,7 +1333,7 @@ docker run -d \
   decolua/9router:latest
 ```
 
-→ Open http://localhost:20128
+→ Open <http://localhost:20128>
 
 **Build from source (dev):**
 

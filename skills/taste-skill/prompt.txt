@@ -1,0 +1,17 @@
+# Frontend Design & Taste Guidelines (Anti-AI-Slop)
+
+When designing, writing, or refactoring user interfaces, CSS, or frontend components:
+1. Anti-AI-Slop Aesthetics: Never use generic template tropes like uniform 3-card grid feature sections, purple-indigo gradient buttons, fake metrics ('+47% conversion'), or italicized headers ('Built to <em>think</em>').
+2. Color & Typography Discipline: Use curated OKLCH / HSL semantic tokens (e.g., var(--bg), var(--accent)). Pair distinct fonts (e.g. Inter/Geist paired with Instrument Serif or Space Grotesk) instead of browser defaults. Maintain strict WCAG AA contrast.
+3. Component State Completeness: Every interactive component must handle all 8 states: default, hover, active, focus-visible, disabled, loading, error, and success with smooth hardware-accelerated transitions.
+4. Visual Hierarchy & Micro-interactions: Use asymmetric layouts, purposeful whitespace on a 4pt/8pt scale, crisp 1px borders, subtle glassmorphism/depth, and responsive breakpoints down to 320px.
+
+Dynamic Configuration:
+- Design Variance: {design_variance} / 10
+  * [1-3]: Strict, minimal, conservative structure with restrained ornamentation.
+  * [4-7]: Balanced, modern anti-slop design with polished visual hierarchy (Standard).
+  * [8-10]: Highly expressive, bold asymmetry, editorial typography, and bespoke visual DNA.
+- Motion Intensity: {motion_intensity} / 10
+  * [1-3]: Reduced motion, fast subtle opacity transitions (0.1s - 0.15s).
+  * [4-7]: Smooth interactive physics, responsive micro-hover transitions (0.2s - 0.3s).
+  * [8-10]: Dynamic fluid choreographies, expressive state transitions, and spring animations.

@@ -90,6 +90,15 @@ export async function exportDb() {
   for (const r of db.all(`SELECT key, value FROM kv WHERE scope = 'mitmAlias'`)) out.mitmAlias[r.key] = parseJson(r.value);
   for (const r of db.all(`SELECT key, value FROM kv WHERE scope = 'pricing'`)) out.pricing[r.key] = parseJson(r.value);
 
+  // Include 9Router Extended & Community skills in backup
+  try {
+    const { getSkillManifests } = await import("@/lib/skillsRegistry");
+    const manifests = await getSkillManifests();
+    out.skills = manifests;
+  } catch (err) {
+    // Non-fatal if skills directory reading fails
+  }
+
   return out;
 }
 
@@ -161,6 +170,20 @@ export async function importDb(payload) {
       db.run(`INSERT OR REPLACE INTO kv(scope, key, value) VALUES('pricing', ?, ?)`, [provider, stringifyJson(models || {})]);
     }
   });
+
+  // Restore Custom Skills & 9Router Extended modules
+  if (Array.isArray(payload.skills) && payload.skills.length > 0) {
+    try {
+      const { createCustomSkill } = await import("@/lib/skillsRegistry");
+      for (const skill of payload.skills) {
+        if (skill && skill.id && (skill.source === "custom" || skill.prompt_template)) {
+          await createCustomSkill(skill).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("[Settings][ImportDb] Failed to restore custom skills:", e);
+    }
+  }
 
   return await exportDb();
 }
