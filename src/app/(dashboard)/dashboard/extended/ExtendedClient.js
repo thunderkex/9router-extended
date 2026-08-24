@@ -91,6 +91,10 @@ export default function ExtendedClient() {
   const [formInstallCmd, setFormInstallCmd] = useState("");
   const [formUninstallCmd, setFormUninstallCmd] = useState("");
   const [formConfigs, setFormConfigs] = useState([]);
+  
+  // How to Use Modal State
+  const [showHowToUseModal, setShowHowToUseModal] = useState(false);
+  const [selectedSkillForGuide, setSelectedSkillForGuide] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -451,6 +455,17 @@ export default function ExtendedClient() {
 
                   <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                     <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedSkillForGuide(skill);
+                        setShowHowToUseModal(true);
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[16px] mr-1">help</span>
+                      How to Use
+                    </Button>
+                    <Button
                       variant={isInstalled ? "danger" : "primary"}
                       size="sm"
                       onClick={() => handleInstallSkill(skill)}
@@ -780,6 +795,256 @@ export default function ExtendedClient() {
         onConfirm={handleDeleteSkill}
         onClose={() => setSkillToDelete(null)}
       />
+
+      {/* How to Use Modal */}
+      <Modal
+        isOpen={showHowToUseModal}
+        size="full"
+        title={`How to Use: ${selectedSkillForGuide?.name || ""}`}
+        onClose={() => {
+          setShowHowToUseModal(false);
+          setSelectedSkillForGuide(null);
+        }}
+        footer={
+          <div className="flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowHowToUseModal(false);
+                setSelectedSkillForGuide(null);
+              }}
+            >
+              Close
+            </Button>
+          </div>
+        }
+      >
+        {selectedSkillForGuide && (
+          <div className="space-y-6 text-sm">
+            {/* Graphify Guide */}
+            {selectedSkillForGuide.id === "graphify" && (
+              <>
+                <div className="p-4 bg-surface-2 rounded-xl border border-border space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-[20px]">info</span>
+                    <h3 className="font-semibold text-text-main">What is Graphify?</h3>
+                  </div>
+                  <p className="text-text-muted leading-relaxed">
+                    Graphify transforms your entire codebase into a persistent knowledge graph using god nodes, community detection, and semantic relationships. It enables powerful context-aware queries about your project architecture.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">play_circle</span>
+                    Installation & Setup
+                  </h3>
+                  <ol className="list-decimal list-inside space-y-2 text-text-muted ml-2">
+                    <li>Click the <strong className="text-text-main">Install</strong> button above (executes: <code className="text-xs bg-surface-2 px-2 py-0.5 rounded font-mono">uv tool install graphifyy && graphify install</code>)</li>
+                    <li>Wait for installation to complete (~30 seconds)</li>
+                    <li>Toggle switch turns green when ready</li>
+                  </ol>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">terminal</span>
+                    Usage in AI Agent CLI
+                  </h3>
+                  <div className="bg-surface-3 p-4 rounded-xl space-y-3 border border-border">
+                    <p className="text-text-muted"><strong className="text-text-main">Option 1:</strong> Use the <code className="text-xs bg-surface px-2 py-0.5 rounded font-mono text-primary">/graphify</code> command</p>
+                    <pre className="text-xs font-mono text-text-main bg-surface p-3 rounded-lg overflow-x-auto border border-border">
+{`/graphify`}
+                    </pre>
+
+                    <p className="text-text-muted"><strong className="text-text-main">Option 2:</strong> Ask natural language questions</p>
+                    <pre className="text-xs font-mono text-text-main bg-surface p-3 rounded-lg overflow-x-auto border border-border">
+{`Explain the architecture of this codebase using graphify
+
+What are the main modules and their relationships?
+
+Show me the dependency graph for the authentication system`}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">integration_instructions</span>
+                    Integration with CLI Tools
+                  </h3>
+                  <p className="text-text-muted leading-relaxed">
+                    Once installed, Graphify automatically works with any AI agent connected to 9Router:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1.5 text-text-muted ml-2">
+                    <li><strong className="text-text-main">Claude Code</strong> → Navigate to <span className="text-primary">/dashboard/cli-tools</span> → Configure Claude Code with 9Router endpoint</li>
+                    <li><strong className="text-text-main">Cline</strong> → Set API endpoint to <code className="text-xs bg-surface-2 px-2 py-0.5 rounded font-mono">http://localhost:20128/v1</code></li>
+                    <li><strong className="text-text-main">Roo Code</strong> → Configure via CLI Tools page</li>
+                    <li><strong className="text-text-main">Codex</strong> → Auto-detects 9Router when running locally</li>
+                  </ul>
+                </div>
+
+                {selectedSkillForGuide.source && (
+                  <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+                    <a
+                      href={selectedSkillForGuide.source}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline flex items-center gap-2 text-xs font-medium"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                      View Official Documentation
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* MCP Inspector Guide */}
+            {selectedSkillForGuide.id === "mcp-inspector" && (
+              <>
+                <div className="p-4 bg-surface-2 rounded-xl border border-border space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-[20px]">info</span>
+                    <h3 className="font-semibold text-text-main">What is MCP Inspector?</h3>
+                  </div>
+                  <p className="text-text-muted leading-relaxed">
+                    The Model Context Protocol Inspector is a browser-based UI testing and debugging tool for MCP servers. It lets you interactively test tools, resources, and prompts without needing an AI agent.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">play_circle</span>
+                    Installation & Setup
+                  </h3>
+                  <ol className="list-decimal list-inside space-y-2 text-text-muted ml-2">
+                    <li>Click the <strong className="text-text-main">Install</strong> button above (executes: <code className="text-xs bg-surface-2 px-2 py-0.5 rounded font-mono">npm install -g @modelcontextprotocol/inspector</code>)</li>
+                    <li>Installation completes in ~15 seconds</li>
+                    <li>Toggle turns green when ready</li>
+                  </ol>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">terminal</span>
+                    Usage in Terminal
+                  </h3>
+                  <div className="bg-surface-3 p-4 rounded-xl space-y-3 border border-border">
+                    <p className="text-text-muted"><strong className="text-text-main">Basic Usage:</strong> Launch Inspector with any MCP server</p>
+                    <pre className="text-xs font-mono text-text-main bg-surface p-3 rounded-lg overflow-x-auto border border-border">
+{`npx @modelcontextprotocol/inspector <your-mcp-server-command>`}
+                    </pre>
+
+                    <p className="text-text-muted"><strong className="text-text-main">Example 1:</strong> Test SQLite MCP Server</p>
+                    <pre className="text-xs font-mono text-text-main bg-surface p-3 rounded-lg overflow-x-auto border border-border">
+{`npx @modelcontextprotocol/inspector \\
+  npx -y @modelcontextprotocol/server-sqlite \\
+  --db-path ./mydb.sqlite`}
+                    </pre>
+
+                    <p className="text-text-muted"><strong className="text-text-main">Example 2:</strong> Test Filesystem MCP Server</p>
+                    <pre className="text-xs font-mono text-text-main bg-surface p-3 rounded-lg overflow-x-auto border border-border">
+{`npx @modelcontextprotocol/inspector \\
+  npx -y @modelcontextprotocol/server-filesystem \\
+  /path/to/allowed/files`}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">web</span>
+                    Web UI Features
+                  </h3>
+                  <p className="text-text-muted leading-relaxed">
+                    Inspector opens at <code className="text-xs bg-surface-2 px-2 py-0.5 rounded font-mono text-primary">http://localhost:5173</code> with:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1.5 text-text-muted ml-2">
+                    <li><strong className="text-text-main">Tools Tab</strong> → Test all available MCP tools with custom parameters</li>
+                    <li><strong className="text-text-main">Resources Tab</strong> → Browse and read MCP resources (files, databases, APIs)</li>
+                    <li><strong className="text-text-main">Prompts Tab</strong> → Test prompt templates with argument injection</li>
+                    <li><strong className="text-text-main">Console Logs</strong> → Real-time JSON-RPC message inspection</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">lightbulb</span>
+                    Pro Tips
+                  </h3>
+                  <ul className="list-disc list-inside space-y-1.5 text-text-muted ml-2">
+                    <li>Use Inspector to <strong className="text-text-main">validate MCP servers before connecting to AI agents</strong></li>
+                    <li>Debug tool schema mismatches and permission errors in real-time</li>
+                    <li>Copy working tool invocations from Inspector to agent prompts</li>
+                    <li>Monitor JSON-RPC traffic to understand MCP protocol flow</li>
+                  </ul>
+                </div>
+
+                {selectedSkillForGuide.source && (
+                  <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+                    <a
+                      href={selectedSkillForGuide.source}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline flex items-center gap-2 text-xs font-medium"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                      View Official MCP Inspector Docs
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Generic CLI Tool Guide */}
+            {selectedSkillForGuide.id !== "graphify" && selectedSkillForGuide.id !== "mcp-inspector" && (
+              <>
+                <div className="p-4 bg-surface-2 rounded-xl border border-border space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-[20px]">info</span>
+                    <h3 className="font-semibold text-text-main">About This Tool</h3>
+                  </div>
+                  <p className="text-text-muted leading-relaxed">
+                    {selectedSkillForGuide.description}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-text-main flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">play_circle</span>
+                    Installation
+                  </h3>
+                  <ol className="list-decimal list-inside space-y-2 text-text-muted ml-2">
+                    <li>Click the <strong className="text-text-main">Install</strong> button in the card above</li>
+                    {selectedSkillForGuide.install_command && (
+                      <li className="ml-6">
+                        Executes: <code className="text-xs bg-surface-2 px-2 py-0.5 rounded font-mono">{selectedSkillForGuide.install_command}</code>
+                      </li>
+                    )}
+                    <li>Wait for installation to complete</li>
+                    <li>Tool becomes available globally in your terminal</li>
+                  </ol>
+                </div>
+
+                {selectedSkillForGuide.source && selectedSkillForGuide.source !== "custom" && (
+                  <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+                    <a
+                      href={selectedSkillForGuide.source}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline flex items-center gap-2 text-xs font-medium"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                      View Official Documentation
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
