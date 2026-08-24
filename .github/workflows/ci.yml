@@ -1,0 +1,55 @@
+name: CI - Build & Test
+
+on:
+  push:
+    branches: [main, master, extended]
+  pull_request:
+    branches: [main, master, extended]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Package (Node ${{ matrix.node-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Dependencies
+        run: |
+          npm install --no-audit --no-fund
+          cd cli && npm install --no-audit --no-fund
+        shell: bash
+
+      - name: Build & Package 9Router CLI Bundle
+        run: |
+          cd cli && npm run pack:cli
+        shell: bash
+
+      - name: Verify Package Tarball
+        run: |
+          ls -la *.tgz
+        shell: bash
+
+      - name: Upload Packaged CLI Tarball Artifact
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 9router-cli-package
+          path: "*.tgz"
+          if-no-files-found: error

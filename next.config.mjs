@@ -48,6 +48,11 @@ const nextConfig = {
         fs: false,
         path: false,
       };
+    } else {
+      config.externals = config.externals || [];
+      config.externals.push({
+        "better-sqlite3": "commonjs better-sqlite3",
+      });
     }
     // Exclude non-source dirs from watcher to reduce inotify load
     config.watchOptions = {
