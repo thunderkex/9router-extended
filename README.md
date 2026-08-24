@@ -75,20 +75,20 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 
 ### 🚀 1. Install 9Router Extended
 
-Choose the fastest method for your environment:
+Choose the installation method for your package manager:
 
 ```bash
-# 📦 Option A: Install directly from GitHub Release (Always Latest)
+# ⚡ Option A: Bun Global Install (Recommended for Bun users)
+bun add -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+
+# 📦 Option B: NPM Global Install (Always Latest Release)
 npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
 
 # (Or install specific release tag, e.g. v0.5.55-extended)
 npm install -g https://github.com/thunderkex/9router-extended/releases/download/v0.5.55-extended/9router-0.5.55-extended.tgz
 
-# 🌿 Option B: Install live from GitHub repository branch
+# 🌿 Option C: Install live from GitHub repository branch (NPM)
 npm install -g git+https://github.com/thunderkex/9router-extended.git#extended
-
-# ⚡ Option C: Run instantly with Bun (Zero Global Install)
-bunx --bun git+https://github.com/thunderkex/9router-extended.git#extended
 ```
 
 <details>
@@ -117,8 +117,11 @@ npm install -g ../9router-*.tgz
 # Check version (Should output 0.5.55-extended)
 9router --version
 
-# Start 9Router
+# Interactive Start (Opens Terminal UI & Dashboard)
 9router
+
+# Run in Background / System Tray (Silent mode)
+9router --tray --skip-update
 ```
 
 - 🌐 **Dashboard:** [`http://localhost:20128`](http://localhost:20128)
