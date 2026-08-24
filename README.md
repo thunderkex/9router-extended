@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./images/9router.png?1" alt="9Router Dashboard" width="800"/>
   
-# 9Router - FREE AI Router & Token Saver
+# 9Router - [Extended](#-9router-extended--pluggable-skill-registry), [Pluggable Skill Registry](#3-creating-custom-skills-via-the-ui-studio), FREE AI Router & Token Saver
   
   **Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
   
@@ -71,62 +71,156 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 
 ---
 
-## ⚡ Quick Start & Installation
+## ⚡ Quick Start & Installation (9Router Extended)
 
 ### 🚀 1. Install 9Router Extended
 
-Choose the installation method for your package manager:
+> ⚠️ **Important:** 9Router Extended is an independent custom fork and **does not update via the official upstream npm registry (`npm update -g 9router`)**. Use one of the installation methods below:
+
+#### ⚡ Option A: Global Tarball Release (Recommended)
+Install the pre-bundled release package directly:
 
 ```bash
-# ⚡ Option A: Bun Global Install (Recommended for Bun users)
+# Via Bun:
 bun add -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
 
-# 📦 Option B: NPM Global Install (Always Latest Release)
-npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+# Via NPM:
+npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --force
+```
 
-# (Or install specific release tag, e.g. v0.5.55-extended)
-npm install -g https://github.com/thunderkex/9router-extended/releases/download/v0.5.55-extended/9router-0.5.55-extended.tgz
-
-# 🌿 Option C: Install live from GitHub repository branch (NPM)
+#### 🌿 Option B: Direct from Git Branch
+```bash
 npm install -g git+https://github.com/thunderkex/9router-extended.git#extended
 ```
 
-<details>
-<summary>🛠️ <b>Build & Install Locally from Source</b></summary>
-
+#### 🛠️ Option C: Build & Install from Source (Local / Development)
 ```bash
-# Clone repository
+# 1. Clone the extended branch
 git clone -b extended https://github.com/thunderkex/9router-extended.git
 cd 9router-extended
 
-# Install dependencies and build bundle
+# 2. Install dependencies & build the bundle
 npm install
-cd cli && npm install
-npm run pack:cli
+cd cli && npm install && npm run pack:cli
+cd ..
 
-# Install generated package globally
-npm install -g ../9router-*.tgz
+# 3. Install globally from the generated tarball
+npm install -g ./9router-*.tgz
 ```
-</details>
+
+---
+
+### 🔄 Updating 9Router Extended
+
+Because the built-in CLI checks the upstream npm registry, use one of the following methods to update:
+
+#### ⚡ Option 1: Update via Release Tarball (Bun / NPM)
+```bash
+# Via Bun:
+bun pm cache rm
+bun remove -g 9router
+bun add -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+
+# Via NPM:
+npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --force
+```
+
+#### 🚀 Option 2: Update with PM2 Service Reload
+If running 9Router as a PM2 background service:
+```bash
+# 1. Update global package (Bun or NPM)
+bun pm cache rm && bun add -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+# (or with npm: npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --force)
+
+# 2. Restart and save PM2 state
+pm2 restart 9router --update-env
+pm2 save
+```
+
+#### 🛠️ Option 3: Update & Build from Local Source (Git Clone)
+If developing locally or pulling the latest commit directly from Git:
+```bash
+# 1. Pull latest changes
+git pull
+
+# 2. Rebuild app & CLI package bundle
+npm install
+npm run build
+cd cli && npm run pack:cli && cd ..
+
+# 3. Reinstall globally
+bun add -g ./9router-*.tgz
+# (or with npm: npm install -g ./9router-*.tgz)
+
+# 4. Restart service (if using PM2)
+pm2 restart 9router --update-env && pm2 save
+```
+
+> 💡 **Browser Cache:** After updating, perform a hard refresh (**`Ctrl + F5`** / **`Shift + Reload`**) on [`http://localhost:20128/dashboard/extended`](http://localhost:20128/dashboard/extended) to load the newly compiled frontend chunks immediately.
 
 ---
 
 ### 🚦 2. Start & Verify
 
 ```bash
-# Check version (Should output 0.5.55-extended)
+# Verify extended version is installed
 9router --version
+# Output: 0.5.55-extended (or latest version)
 
-# Interactive Start (Opens Terminal UI & Dashboard)
+# Interactive start (Terminal UI & Web Dashboard)
 9router
 
-# Run in Background / System Tray (Silent mode)
+# Run in Background / System Tray (Silent mode, skips upstream update check)
 9router --tray --skip-update
 ```
 
 - 🌐 **Dashboard:** [`http://localhost:20128`](http://localhost:20128)
 - 🧩 **9Router Extended Hub:** [`http://localhost:20128/dashboard/extended`](http://localhost:20128/dashboard/extended)
 - 🔌 **OpenAI-Compatible API:** `http://localhost:20128/v1`
+
+---
+
+### ⚙️ 3. Automatic Startup on Boot (Windows / PM2 / Bun)
+
+#### 🪟 Option A: Windows Built-in Auto-Start (Silent Tray)
+Start 9Router in tray mode, or select **"Hide to Tray"** / **"Enable Auto-start"** from the tray menu:
+```bash
+9router --tray --skip-update
+```
+> 💡 Automatically registers `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\9router.vbs` to run silently in the system tray whenever Windows starts.
+
+#### 🚀 Option B: PM2 Process Manager (Recommended for Servers & Background Daemons)
+Keep 9Router running 24/7 with automatic restart on crashes and reboots:
+
+```bash
+# 1. Install PM2 globally (via NPM or Bun)
+npm install -g pm2
+# (or with Bun: bun add -g pm2)
+
+# 2. Start 9Router (uses dynamic ecosystem.config.cjs if available, or direct command)
+pm2 start ecosystem.config.cjs
+# (or: pm2 start 9router --name 9router)
+
+# 3. Save process state
+pm2 save
+
+# 4. Configure auto-start on boot:
+# ── On Windows:
+npm install -g pm2-windows-startup
+pm2-startup install
+pm2 save
+
+# ── On Linux / macOS:
+pm2 startup
+```
+
+**Useful PM2 commands:**
+```bash
+pm2 logs 9router    # View live logs
+pm2 restart 9router # Restart 9Router
+pm2 stop 9router    # Stop background service
+pm2 status          # Check uptime & memory
+```
 
 ---
 

@@ -67,7 +67,7 @@ package-lock.json
 .github/instructions/codacy.instructions.md
 README1.md
 deploy*.sh
-ecosystem.config.*
+!ecosystem.config.cjs
 
 scripts/agSniffer/*
 gitbooks/*
