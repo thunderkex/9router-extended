@@ -1,0 +1,23 @@
+{
+  "id": "ponytail",
+  "name": "Ponytail",
+  "description": "Bias the model toward minimal code: YAGNI, reuse stdlib, deletion over addition",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "default_enabled": false,
+  "legacy_enabled_key": "ponytailEnabled",
+  "source": "https://github.com/DietrichGebert/ponytail",
+  "config_schema": [
+    {
+      "key": "level",
+      "type": "enum",
+      "options": [
+        {"value": "lite", "label": "Lite", "desc": "Build asked, name lazier option"},
+        {"value": "full", "label": "Full", "desc": "Ladder enforced: stdlib/native first"},
+        {"value": "ultra", "label": "Ultra", "desc": "YAGNI extremist, deletion first"}
+      ],
+      "default": "full",
+      "legacy_key": "ponytailLevel"
+    }
+  ]
+}

@@ -321,6 +321,17 @@ function buildCliPackage() {
     console.log("⏭️  No updater files found\n");
   }
 
+  // Step 7c: Copy skills directory (pluggable skill registry manifests)
+  console.log("7️⃣ c Copying skills directory...");
+  const skillsSrc = path.join(appDir, "skills");
+  const skillsDest = path.join(cliAppDir, "skills");
+  if (fs.existsSync(skillsSrc)) {
+    copyRecursive(skillsSrc, skillsDest);
+    console.log("✅ Copied skills files\n");
+  } else {
+    console.log("⏭️  No skills files found\n");
+  }
+
   // Step 8: Build MITM server (config driven - see app/cli/scripts/buildMitm.js)
   console.log("8️⃣  Building MITM server...");
   try {

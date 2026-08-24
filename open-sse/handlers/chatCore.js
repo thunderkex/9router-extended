@@ -29,6 +29,7 @@ import { getCapabilitiesForModel } from "../providers/capabilities.js";
 import { stripUnsupportedModalities } from "../translator/concerns/modality.js";
 import { prefetchRemoteImages } from "../translator/concerns/prefetch.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
+import { injectGenericPrompt } from "../rtk/genericPrompt.js";
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -57,7 +58,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, activeGenericPrompts }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -268,6 +269,14 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (tokenSaverEnabled && ponytailEnabled && ponytailLevel) {
     injectPonytail(translatedBody, finalFormat, ponytailLevel);
     xf.push(`PONYTAIL:${ponytailLevel}`);
+  }
+
+  // Generic prompt-injection skills from manifest
+  if (tokenSaverEnabled && activeGenericPrompts && activeGenericPrompts.length > 0) {
+    for (const skill of activeGenericPrompts) {
+      injectGenericPrompt(translatedBody, finalFormat, skill.prompt);
+      xf.push(`${skill.id.toUpperCase()}:ON`);
+    }
   }
 
   // PXPIPE: image bulky context (Claude-format bodies only), last saver before dispatch

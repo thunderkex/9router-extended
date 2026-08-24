@@ -22,6 +22,7 @@ import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
+import { getSkillManifests } from "@/lib/skillsRegistry.js";
 
 /**
  * Handle chat completion request
@@ -259,6 +260,36 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     // Use shared chatCore
     const chatSettings = await getSettings();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
+
+    // Resolve generic active prompts
+    const manifests = await getSkillManifests();
+    const activeGenericPrompts = [];
+    for (const skill of manifests) {
+      if (skill.hook === "system-prompt" && skill.id !== "caveman" && skill.id !== "ponytail") {
+        const enabledKey = skill.legacy_enabled_key || `${skill.id}Enabled`;
+        const isEnabled = chatSettings[enabledKey] !== undefined ? !!chatSettings[enabledKey] : !!skill.default_enabled;
+        if (isEnabled && skill.prompt_template) {
+          let prompt = skill.prompt_template;
+          if (Array.isArray(skill.config_schema) && skill.config_schema.length > 0) {
+            const paramLines = [];
+            for (const cfg of skill.config_schema) {
+              const key = cfg.legacy_key || cfg.key;
+              const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
+              if (prompt.includes(`{${cfg.key}}`)) {
+                prompt = prompt.replace(new RegExp(`\\{${cfg.key}\\}`, "g"), val);
+              } else {
+                paramLines.push(`- ${cfg.label || cfg.key}: ${val}${cfg.type === "slider" ? ` (scale ${cfg.min ?? 1}-${cfg.max ?? 10})` : ""}`);
+              }
+            }
+            if (paramLines.length > 0) {
+              prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
+            }
+          }
+          activeGenericPrompts.push({ id: skill.id, prompt });
+        }
+      }
+    }
+
     const result = await handleChatCore({
       body: { ...body, model: `${provider}/${model}` },
       modelInfo: { provider, model },
@@ -284,6 +315,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       pxpipeTransform: chatSettings.pxpipeEnabled ? await getPxpipeTransform() : null,
       onPxpipeEvent: appendPxpipeEvent,
       providerThinking,
+      activeGenericPrompts,
       // Detect source format by endpoint + body
       sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
       onCredentialsRefreshed: async (newCreds) => {
