@@ -24,6 +24,8 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { getSkillManifests } from "@/lib/skillsRegistry.js";
+import { record as healthRecord } from "@/lib/routing/health.js";
+import { incrementFailover } from "@/lib/session/cache.js";
 
 /**
  * Handle chat completion request
@@ -64,7 +66,8 @@ export async function handleChat(request, clientRawRequest = null) {
 
   // Enforce API key if enabled in settings
   const settings = await getSettings();
-  if (settings.requireApiKey) {
+  const isInternalCli = request.headers.get("x-9r-cli-token");
+  if (settings.requireApiKey && !isInternalCli) {
     if (!apiKey) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
@@ -260,6 +263,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     // Use shared chatCore
     const chatSettings = await getSettings();
+    const t0 = Date.now();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
 
     // Resolve generic active prompts
@@ -316,6 +320,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       // Lazily warms the in-process module on first use; null when not installed (fail-open)
       pxpipeTransform: chatSettings.pxpipeEnabled ? await getPxpipeTransform() : null,
       onPxpipeEvent: appendPxpipeEvent,
+      // Phase 4: sliding-window token trimmer
+      trimEnabled: !!chatSettings.tokenSaverEnabled,
+      trimBudget: chatSettings.tokenSaverBudget || 80000,
       providerThinking,
       activeGenericPrompts,
       // Detect source format by endpoint + body
@@ -332,7 +339,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     });
 
-    if (result.success) return result.response;
+    if (result.success) {
+      healthRecord(provider, { success: true, latencyMs: Date.now() - t0 });
+      return result.response;
+    }
 
     // Antigravity 409/429: refresh live quota to get exact resetAt before locking
     let quotaResetMs = null;
@@ -352,6 +362,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
 
     if (shouldFallback) {
+      healthRecord(provider, { success: false, latencyMs: Date.now() - t0 });
+      try { incrementFailover(credentials.connectionId); } catch { /* fail-open */ }
       log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
       excludeConnectionIds.add(credentials.connectionId);
       lastError = result.error;
