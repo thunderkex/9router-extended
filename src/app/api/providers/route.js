@@ -9,6 +9,7 @@ import {
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
+import { probeProviderModels } from "@/lib/routing/modelProbe";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +185,9 @@ export async function POST(request) {
       isActive: true,
       testStatus: testStatus || "unknown",
     });
+
+    // Asynchronously probe models with minimal tokens to warm up cache & verify connectivity
+    probeProviderModels(newConnection, { force: true }).catch(() => {});
 
     // Hide sensitive fields
     const result = { ...newConnection };

@@ -62,6 +62,8 @@ const DEFAULT_SETTINGS = {
   pxpipeAutoInstall: true,
   pxpipeMinChars: 25000,
   pxpipeTimeoutMs: 15000,
+  tokenSaverEnabled: false,
+  tokenSaverBudget: 80000, // approximate token budget for sliding-window trim
 };
 
 async function readRaw() {
