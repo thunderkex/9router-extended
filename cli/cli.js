@@ -165,8 +165,8 @@ Commands:
   }
 }
 
-// Auto-relaunch after update: detached process has no TTY → fallback to tray
-if (skipUpdate && !trayMode && !process.stdin.isTTY) {
+// Fallback to tray mode when running without a TTY (PM2, Docker, background service)
+if (!trayMode && !process.stdin.isTTY) {
   trayMode = true;
   process.env.TRAY_MODE = "1";
 }

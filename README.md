@@ -15,7 +15,7 @@
 
 <a href="https://trendshift.io/repositories/22628" target="_blank"><img src="https://trendshift.io/api/badge/repositories/22628" alt="decolua%2F9router | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[🚀 Quick Start](#-quick-start) • [💡 Features](#-key-features) • [📖 Setup](#-setup-guide) • [🌐 Website](https://9router.com)
+[🚀 Quick Start](#-quick-start) • [💡 Features](#-key-features) • [📖 Documentation](./docs/README.md) • [📖 Setup](#-setup-guide) • [🌐 Website](https://9router.com)
 
 [🇧🇷 Português (Brasil)](./i18n/README.pt-BR.md) • [🇻🇳 Tiếng Việt](./i18n/README.vi.md) • [🇨🇳 中文](./i18n/README.zh-CN.md) • [🇯🇵 日本語](./i18n/README.ja-JP.md) • [🇷🇺 Русский](./i18n/README.ru.md) • [🇹🇭 ไทย](./i18n/README.th.md) • [🇮🇷 فارسی](./i18n/README.fa_IR.md) • [🇮🇩 Indonesia](./i18n/README.id-ID.md) • [🇪🇸 Español](./i18n/README.es.md) • [🇫🇷 Français](./i18n/README.fr.md)
 
@@ -165,7 +165,7 @@ pm2 restart 9router --update-env && pm2 save
 ```bash
 # Verify extended version is installed
 9router --version
-# Output: 0.5.55-extended (or latest version)
+# Output: 0.5.56-extended (or latest version)
 
 # Interactive start (Terminal UI & Web Dashboard)
 9router
@@ -680,12 +680,15 @@ a third party under a provider named "Self-hosted".
 | Feature                                                                           | What It Does                                                                             | Why It Matters                                    |
 | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | 🚀 **RTK Token Saver** ([RTK](https://github.com/rtk-ai/rtk) ⭐40K)               | Compress tool outputs (`git diff`, `grep`, `ls`, `tree`...) before sending to LLM        | Save **20-40% input tokens** per request          |
-| 🧠 **Headroom Token Saver** ([Headroom](https://github.com/chopratejas/headroom)) | Optional external `/v1/compress` proxy before provider routing                           | Save more context tokens without changing clients |
+| ✂️ **Token Trimmer & Dedup**                                                      | Schema-aware sliding-window trimming + paragraph prompt deduplication                     | **Prevents context overflows & redundant tokens** |
+| 🧠 **Headroom Token Saver** ([Headroom](https://github.com/chopratejas/headroom)) | 1-Click pip auto-setup, multi-port conflict avoidance & auto-detect `/v1/compress` proxy | **Zero-config context compression**               |
 | 🪨 **Caveman Mode** ([Caveman](https://github.com/JuliusBrussee/caveman) ⭐52K)   | Inject caveman-speak prompt → LLM replies terse, technical substance preserved           | Save **up to 65% output tokens**                  |
 | 🐴 **Ponytail** ([Ponytail](https://github.com/DietrichGebert/ponytail))          | Inject "lazy senior dev" prompt → LLM writes minimal, YAGNI-first code (Lite/Full/Ultra) | **Fewer output tokens, less refactoring**         |
-| 🧩 **9Router Extended**                                                           | Custom rules, prompt injectors, and extensible Agent Skills      | **Infinitely customizable**                       |
-| 🎯 **Smart 3-Tier Fallback**                                                      | Auto-route: Subscription → Cheap → Free                                                  | Never stop coding, zero downtime                  |
-| 📊 **Real-Time Quota Tracking**                                                   | Live token count + reset countdown                                                       | Maximize subscription value                       |
+| 🧩 **9Router Extended & Skills**                                                  | Dynamic prompt injection, `pre-route`/`post-response` hooks, and agent tool registry     | **Infinitely customizable**                       |
+| ⚡ **Routing Health & Circuit Breaker**                                            | In-memory EMA latency tracking ($\alpha=0.2$) + auto-trip on consecutive failures        | **Instant auto-failover, zero dead calls**        |
+| 🎯 **Smart Auto-Combos & Fallback**                                               | Score-ranked fallback recommendations: Subscription → Cheap → Free                       | Never stop coding, zero downtime                  |
+| 📊 **Real-Time Quota & Latency Tracking**                                         | Live token count, reset countdown, and SSE latency push stream (`/api/health/latency-stream`) | Maximize subscription value & visibility          |
+| 🛡️ **Actionable Proxy Diagnostics**                                               | Standard OpenAI errors enriched with structured codes & recovery hints (`error.diagnostic`) | **Zero-guesswork troubleshooting**                |
 | 🔄 **Format Translation**                                                         | OpenAI ↔ Claude ↔ Gemini ↔ Cursor ↔ Kiro ↔ Vertex                                        | Works with any CLI tool                           |
 | 👥 **Multi-Account Support**                                                      | Multiple accounts per provider                                                           | Load balancing + redundancy                       |
 | 🔄 **Auto Token Refresh**                                                         | OAuth tokens refresh automatically                                                       | No manual re-login needed                         |
@@ -715,34 +718,39 @@ Without RTK: 47K tokens sent to LLM
 With RTK:    28K tokens sent to LLM   (40% saved · same context · same answer)
 ```
 
-### 🧠 Headroom Token Saver
+### ✂️ Token Trimmer & Deduplication
 
-Headroom is optional and runs separately. 9Router calls Headroom's local `/v1/compress` endpoint, then keeps normal routing, fallback, auth, and usage tracking:
+For ultra-long agent conversations that approach provider context windows:
+- **Sliding-Window Trimmer:** Preserves the initial system message and the last 3 turns, safely evicting older middle turns while strictly maintaining `tool_use` and `tool_result` pair integrity so tool call IDs are never orphaned.
+- **Prompt Paragraph Dedup:** Deduplicates identical prompt paragraphs injected multiple times across different skill layers.
+- **Configurable:** Toggle and set token budgets in **Dashboard → Settings → Token Saver**.
+
+### 🧠 Headroom Token Saver (1-Click Auto Setup & Multi-Port Auto Detect)
+
+Headroom is an external context compression proxy. 9Router calls Headroom's `/v1/compress` endpoint to compress large prompt contexts before forwarding to LLM providers:
 
 ```
 Client → 9Router → Headroom /v1/compress → 9Router → provider
 ```
 
-Local setup:
+#### ⚡ 1-Click Auto Install (Zero-Config)
+In **Dashboard → Token Saver → Headroom**:
+- **⚡ 1-Click Auto Setup:** Automatically discovers your local Python ($\ge 3.10$) environment, executes `pip install "headroom-ai[proxy]"`, launches the daemon, and enables compression in one click.
+- **🔄 Smart Port Conflict Avoidance:** If port `8787` is occupied by another app, 9Router automatically probes and binds to the next available port (`8788`, `8789`...) with zero manual config.
+- **📡 Auto-Detect Port Radar:** Click "Auto-Detect Port" in the Headroom modal to scan active instances running on ports 8787–8791 and instantly sync your proxy URL.
 
+#### 🛠️ Manual Local / Docker Setup (Optional)
 ```bash
+# Manual Python install & start:
 pip install "headroom-ai[proxy]"
 headroom proxy --port 8787
+
+# Docker sidecar examples:
+http://headroom:8787            # Same Docker network
+http://host.docker.internal:8787 # Running on host
 ```
 
-Enable in Dashboard → Endpoint → Token Saver → Headroom. Default URL: `http://localhost:8787`.
-
-Docker examples:
-
-```bash
-# Headroom service in same Docker network
-http://headroom:8787
-
-# Headroom running on host machine
-http://host.docker.internal:8787
-```
-
-If Headroom is down or returns an error, 9Router fails open and sends the original request.
+> 💡 **Fail-Open Safety:** If Headroom is stopped or encounters an error, 9Router fails open automatically and forwards the uncompressed request directly without breaking your session.
 
 ### 🐴 Ponytail (Lazy Senior Dev)
 
@@ -1683,7 +1691,12 @@ Notes:
 **First login not working**
 
 - Check `INITIAL_PASSWORD` in `.env`
-- If unset, fallback password is `123456`
+- In development, default fallback password is `123456`.
+- ⚠️ **Production Guard**: In `NODE_ENV=production`, 9Router refuses to boot if `INITIAL_PASSWORD` is `123456` or unset. Set a strong password in your `.env` before deploying.
+
+**Proxy Error Diagnostics (`error.diagnostic`)**
+
+- All proxy errors conform to standard OpenAI error payloads, enriched with `error.diagnostic.code`, `error.diagnostic.hint`, and `error.diagnostic.provider` for instant debugging without log-diving.
 
 **No request logs under `logs/`**
 
