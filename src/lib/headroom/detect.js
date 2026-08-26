@@ -1,5 +1,7 @@
 import { execFileSync, execSync } from "child_process";
+import fs from "fs";
 import path from "path";
+import net from "net";
 
 // Extras that improve headroom compression quality. `proxy` is the base;
 // `code` adds tree-sitter AST compression; `ml` adds Kompress-v2 HF model.
@@ -22,6 +24,18 @@ const WHICH_CMD = IS_WIN ? "where" : "which";
 // Extra bin dirs often missing from a packaged/launchd PATH (Python installs headroom here).
 const EXTRA_BINS = IS_WIN
   ? [
+      ...(process.env.LOCALAPPDATA
+        ? [process.env.LOCALAPPDATA, path.join(process.env.LOCALAPPDATA, "Python")]
+            .flatMap((root) => {
+              try {
+                return fs.readdirSync(root, { withFileTypes: true })
+                  .filter((entry) => entry.isDirectory() && entry.name.toLowerCase().startsWith("python"))
+                  .map((entry) => path.join(root, entry.name, "Scripts"));
+              } catch {
+                return [];
+              }
+            })
+        : []),
       `${process.env.LOCALAPPDATA || ""}\\Programs\\Python\\Python313\\Scripts`,
       `${process.env.LOCALAPPDATA || ""}\\Programs\\Python\\Python312\\Scripts`,
       `${process.env.LOCALAPPDATA || ""}\\Programs\\Python\\Python311\\Scripts`,
@@ -132,6 +146,47 @@ export async function probeProxyRunning(url) {
   }
 }
 
+/** Check if a TCP port is available to bind on localhost. */
+export async function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+/** Find the first available port starting from startPort. */
+export async function findAvailablePort(startPort = 8787, maxTries = 20) {
+  for (let port = startPort; port < startPort + maxTries; port++) {
+    if (await isPortAvailable(port)) return port;
+  }
+  return startPort;
+}
+
+/** Scan common ports to see if a Headroom instance is already running. */
+export async function autoDetectHeadroomPort(preferredUrl = null) {
+  const candidatePorts = [8787, 8788, 8789, 8790, 8791];
+  
+  if (preferredUrl) {
+    try {
+      const u = new URL(preferredUrl);
+      const p = parseInt(u.port, 10);
+      if (p && !candidatePorts.includes(p)) candidatePorts.unshift(p);
+    } catch {}
+  }
+
+  for (const port of candidatePorts) {
+    const testUrl = `http://localhost:${port}`;
+    if (await probeProxyRunning(testUrl)) {
+      return { found: true, port, url: testUrl };
+    }
+  }
+  return { found: false, port: null, url: "http://localhost:8787" };
+}
+
 export function isLoopbackHeadroomUrl(url) {
   try {
     const parsed = new URL(url);
@@ -146,8 +201,21 @@ export async function getHeadroomStatus(url) {
   const path = findHeadroomBinary();
   const python = findPython310();
   const installed = Boolean(path);
-  const running = await probeProxyRunning(url);
-  const localUrl = isLoopbackHeadroomUrl(url);
+  let running = await probeProxyRunning(url);
+  let detectedPort = null;
+  let activeUrl = url;
+
+  // If not running on configured URL, auto-probe other standard ports
+  if (!running && (!url || isLoopbackHeadroomUrl(url))) {
+    const detected = await autoDetectHeadroomPort(url);
+    if (detected.found) {
+      running = true;
+      activeUrl = detected.url;
+      detectedPort = detected.port;
+    }
+  }
+
+  const localUrl = isLoopbackHeadroomUrl(activeUrl);
   const extrasStatus = installed ? getInstalledHeadroomExtras(python) : { installed: false, version: null, extras: { code: false, ml: false } };
   return {
     installed,
@@ -155,6 +223,8 @@ export async function getHeadroomStatus(url) {
     running,
     python,
     localUrl,
+    activeUrl,
+    detectedPort,
     canStart: installed && localUrl,
     version: extrasStatus.version,
     extras: extrasStatus.extras,

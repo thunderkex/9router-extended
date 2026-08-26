@@ -2,7 +2,14 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { DATA_DIR } from "@/lib/dataDir.js";
-import { findHeadroomBinary, findPython310, HEADROOM_COMPRESSION_EXTRAS, EXTRA_MARKERS, getInstalledHeadroomExtras } from "./detect.js";
+import {
+  findHeadroomBinary,
+  findPython310,
+  findAvailablePort,
+  HEADROOM_COMPRESSION_EXTRAS,
+  EXTRA_MARKERS,
+  getInstalledHeadroomExtras,
+} from "./detect.js";
 
 const HEADROOM_DIR = path.join(DATA_DIR, "headroom");
 const PID_FILE = path.join(HEADROOM_DIR, "proxy.pid");
@@ -53,7 +60,7 @@ function extrasProxyArgs({ codeAware, kompress } = {}) {
 }
 
 export async function startHeadroomProxy({ port = DEFAULT_PORT, codeAware = false, kompress = true } = {}) {
-  const safePort = Number(port) > 0 && Number(port) < 65536 ? Number(port) : DEFAULT_PORT;
+  let safePort = Number(port) > 0 && Number(port) < 65536 ? Number(port) : DEFAULT_PORT;
   const binary = findHeadroomBinary();
   if (!binary) {
     const err = new Error("Headroom CLI not installed");
@@ -62,7 +69,10 @@ export async function startHeadroomProxy({ port = DEFAULT_PORT, codeAware = fals
   }
 
   const existing = getManagedPid();
-  if (existing) return { pid: existing, alreadyRunning: true };
+  if (existing) return { pid: existing, port: safePort, alreadyRunning: true };
+
+  // Auto-find next available port if requested port is blocked
+  safePort = await findAvailablePort(safePort);
 
   ensureDir();
   // spawn stdio requires fd numbers, not WriteStream objects.
@@ -106,7 +116,7 @@ export async function startHeadroomProxy({ port = DEFAULT_PORT, codeAware = fals
   // Close parent's copy of the fd; child retains its own after unref.
   fs.closeSync(outFd);
 
-  return { pid: child.pid, alreadyRunning: false };
+  return { pid: child.pid, port: safePort, alreadyRunning: false };
 }
 
 export function stopHeadroomProxy() {
@@ -161,21 +171,16 @@ export function getHeadroomLogTail(maxLines = 200) {
 // Install (or upgrade) headroom-ai with the requested compression extras.
 // `extras` is a whitelist from HEADROOM_COMPRESSION_EXTRAS — anything else
 // is rejected to keep the install surface predictable. Always installs the
-// `proxy` base + whatever extras the user picked, regardless of what is
-// already present.
+// `proxy` base + whatever extras the user picked.
 export async function installHeadroomExtras(extras = []) {
   const requested = Array.isArray(extras) ? extras.filter((e) => HEADROOM_COMPRESSION_EXTRAS.includes(e)) : [];
   const py = findPython310();
   if (!py) {
-    const err = new Error("Python >= 3.10 not found");
+    const err = new Error("Python >= 3.10 not found. Please install Python 3.10+ to run Headroom locally.");
     err.code = "NO_PYTHON";
     throw err;
   }
-  if (!findHeadroomBinary()) {
-    const err = new Error("headroom-ai not installed (run `pip install headroom-ai[proxy]` first)");
-    err.code = "NOT_INSTALLED";
-    throw err;
-  }
+
   // pip install string is built from a closed set (HEADROOM_COMPRESSION_EXTRAS),
   // so it cannot be poisoned by caller input — the comma-list is a fixed
   // ['proxy', ...requested]. No shell interpolation.

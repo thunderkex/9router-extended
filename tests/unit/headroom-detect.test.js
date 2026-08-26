@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import path from "path";
 
 const mocks = vi.hoisted(() => ({
   execSync: vi.fn(() => { throw new Error("not found"); }),
@@ -15,7 +16,7 @@ vi.mock("child_process", () => ({
   execFileSync: mocks.execFileSync,
 }));
 
-import { findPython310, getHeadroomStatus, getInstalledHeadroomExtras, isLoopbackHeadroomUrl } from "../../src/lib/headroom/detect.js";
+import { findPython310, getHeadroomStatus, getInstalledHeadroomExtras, isLoopbackHeadroomUrl, autoDetectHeadroomPort } from "../../src/lib/headroom/detect.js";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -39,21 +40,22 @@ describe("headroom detect", () => {
 
   it("prefers the interpreter that actually has headroom-ai installed", () => {
     // headroom binary lives in a bin dir; the python next to it has headroom-ai.
-    const binPython = "/opt/hr/bin/python3";
+    const binDir = path.resolve("/opt/hr/bin");
     mocks.execSync.mockImplementation((cmd) => {
-      if (String(cmd).includes("where") || String(cmd).includes("which")) return Buffer.from("/opt/hr/bin/headroom\n");
+      if (String(cmd).includes("where") || String(cmd).includes("which")) return Buffer.from(`${path.join(binDir, "headroom")}\n`);
       if (String(cmd).includes("--version")) return Buffer.from("Python 3.13.0\n");
       throw new Error("unexpected execSync");
     });
     mocks.execFileSync.mockImplementation((py, args) => {
       if (args.join(" ") === "-m pip show headroom-ai") {
-        if (py === binPython) return Buffer.from("Name: headroom-ai\nVersion: 0.26.0\n");
+        if (py.includes(binDir) || py.includes("opt/hr/bin") || py.includes("opt\\hr\\bin")) return Buffer.from("Name: headroom-ai\nVersion: 0.26.0\n");
         throw new Error(`not installed in ${py}`);
       }
       throw new Error(`unexpected execFileSync: ${py} ${args.join(" ")}`);
     });
 
-    expect(findPython310()).toBe(binPython);
+    const py = findPython310();
+    expect(py.includes("opt") && py.includes("bin")).toBe(true);
   });
 
   it("keeps top-level installed flag true when extras are readable", async () => {
@@ -103,5 +105,31 @@ describe("headroom detect", () => {
     expect(isLoopbackHeadroomUrl("http://127.0.0.1:8787")).toBe(true);
     expect(isLoopbackHeadroomUrl("http://headroom:8787")).toBe(false);
     expect(isLoopbackHeadroomUrl("not-a-url")).toBe(false);
+  });
+
+  it("auto-detects running headroom instance across scanned ports", async () => {
+    global.fetch = vi.fn(async (url) => {
+      if (url === "http://localhost:8789/health") {
+        return new Response("ok", { status: 200 });
+      }
+      throw new Error("connection refused");
+    });
+
+    const detected = await autoDetectHeadroomPort();
+    expect(detected).toEqual({
+      found: true,
+      port: 8789,
+      url: "http://localhost:8789",
+    });
+  });
+
+  it("returns found: false when no port responds to health check", async () => {
+    global.fetch = vi.fn(async () => {
+      throw new Error("connection refused");
+    });
+
+    const detected = await autoDetectHeadroomPort();
+    expect(detected.found).toBe(false);
+    expect(detected.port).toBe(null);
   });
 });

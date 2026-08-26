@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSettings } from "@/lib/localDb";
+import { getSettings, updateSettings } from "@/lib/localDb";
 import { startHeadroomProxy } from "@/lib/headroom/process";
 import { DEFAULT_HEADROOM_URL, isLoopbackHeadroomUrl } from "@/lib/headroom/detect";
 
@@ -27,6 +27,14 @@ export async function POST() {
       codeAware: settings.headroomCodeAware === true,
       kompress: settings.headroomKompress !== false,
     });
+    
+    // Auto-update headroomUrl if port adjusted to resolve conflict
+    if (result.port && result.port !== port) {
+      const newUrl = `http://localhost:${result.port}`;
+      await updateSettings({ headroomUrl: newUrl });
+      result.url = newUrl;
+    }
+
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     const status = error.code === "NOT_INSTALLED" ? 400 : 500;
