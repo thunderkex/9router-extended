@@ -36,6 +36,9 @@ export default function TokenSaverClient() {
   const [removingExtra, setRemovingExtra] = useState(null);
   const [installLog, setInstallLog] = useState("");
   const [extrasConfirm, setExtrasConfirm] = useState(null);
+  const [autoSetupLoading, setAutoSetupLoading] = useState(false);
+  const [autoDetectLoading, setAutoDetectLoading] = useState(false);
+  const [autoSetupMessage, setAutoSetupMessage] = useState("");
   const [codeAware, setCodeAware] = useState(false);
   const [kompress, setKompress] = useState(true);
   const [restartingProxy, setRestartingProxy] = useState(false);
@@ -57,6 +60,8 @@ export default function TokenSaverClient() {
   const [showPxpipeModal, setShowPxpipeModal] = useState(false);
   const [pxpipeActionLoading, setPxpipeActionLoading] = useState(false);
   const [pxpipeActionError, setPxpipeActionError] = useState("");
+  const [tokenSaverEnabled, setTokenSaverEnabled] = useState(false);
+  const [tokenSaverBudget, setTokenSaverBudget] = useState(80000);
   const [locale, setLocale] = useState("en");
   const [settings, setSettings] = useState({});
   const [skills, setSkills] = useState([]);
@@ -209,12 +214,6 @@ export default function TokenSaverClient() {
     }
   }, [refreshHeadroomStatus]);
 
-  const togglePendingExtra = (extra) => {
-    setPendingExtras((cur) =>
-      cur.includes(extra) ? cur.filter((e) => e !== extra) : [...cur, extra]
-    );
-  };
-
   // Poll the install log tail while a pip install/uninstall is running.
   const startLogPolling = useCallback(() => {
     setInstallLog("");
@@ -240,6 +239,59 @@ export default function TokenSaverClient() {
   }, []);
 
   useEffect(() => () => stopLogPolling(), [stopLogPolling]);
+
+  const handleAutoSetupHeadroom = useCallback(async () => {
+    setAutoSetupLoading(true);
+    setHeadroomActionError("");
+    setAutoSetupMessage("Installing headroom-ai[proxy] and launching proxy daemon...");
+    startLogPolling();
+    try {
+      const res = await fetch("/api/headroom/auto-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extras: ["code"] }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "1-Click auto setup failed");
+      if (data.url) {
+        setHeadroomUrl(data.url);
+      }
+      setHeadroomEnabled(true);
+      setAutoSetupMessage("Headroom is up and running!");
+      await refreshHeadroomStatus();
+    } catch (e) {
+      setHeadroomActionError(e.message);
+      setAutoSetupMessage("");
+    } finally {
+      stopLogPolling();
+      setAutoSetupLoading(false);
+    }
+  }, [refreshHeadroomStatus, startLogPolling, stopLogPolling]);
+
+  const handleAutoDetectPort = useCallback(async () => {
+    setAutoDetectLoading(true);
+    setHeadroomActionError("");
+    try {
+      const res = await fetch("/api/headroom/detect-port", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (data.found && data.url) {
+        setHeadroomUrl(data.url);
+        await refreshHeadroomStatus();
+      } else {
+        setHeadroomActionError("No running Headroom instance found on ports 8787-8791.");
+      }
+    } catch (e) {
+      setHeadroomActionError(e.message || "Failed to auto-detect port");
+    } finally {
+      setAutoDetectLoading(false);
+    }
+  }, [refreshHeadroomStatus]);
+
+  const togglePendingExtra = (extra) => {
+    setPendingExtras((cur) =>
+      cur.includes(extra) ? cur.filter((e) => e !== extra) : [...cur, extra]
+    );
+  };
 
   const installExtrasConfirmed = useCallback(async () => {
     if (pendingExtras.length === 0) return;
@@ -409,11 +461,15 @@ export default function TokenSaverClient() {
     patchSetting({ pxpipeMinChars: next });
   };
 
-  const handleHeadroomTimeoutBlur = () => {
-    const raw = Math.round(Number(headroomTimeoutMs));
-    const next = Number.isFinite(raw) && raw > 0 ? raw : 3000;
-    setHeadroomTimeoutMs(next);
-    patchSetting({ headroomTimeoutMs: next });
+  const handleTokenSaverToggle = (value) => {
+    setTokenSaverEnabled(value);
+    patchSetting({ tokenSaverEnabled: value });
+  };
+
+  const handleTokenSaverBudgetBlur = () => {
+    const next = Math.max(1000, Number(tokenSaverBudget) || 80000);
+    setTokenSaverBudget(next);
+    patchSetting({ tokenSaverBudget: next });
   };
 
   useEffect(() => {
@@ -434,6 +490,8 @@ export default function TokenSaverClient() {
           setPonytailLevel(data.ponytailLevel || "full");
           setPxpipeEnabled(!!data.pxpipeEnabled);
           if (typeof data.pxpipeMinChars === "number") setPxpipeMinChars(data.pxpipeMinChars);
+          setTokenSaverEnabled(!!data.tokenSaverEnabled);
+          if (typeof data.tokenSaverBudget === "number") setTokenSaverBudget(data.tokenSaverBudget);
           setSettings(data);
           refreshHeadroomStatus();
           refreshPxpipeStatus().then(runPxpipeHealth);
@@ -498,8 +556,89 @@ export default function TokenSaverClient() {
     setInstallingSkill(null);
   };
 
+  const DEFAULT_TOKEN_SAVER_SKILLS = [
+    {
+      id: "rtk",
+      name: "RTK",
+      description: "Compress tool output (git/grep/ls/tree/logs → 60-90% fewer input tokens)",
+      source: "https://github.com/rtk-ai/rtk",
+      default_enabled: true,
+      legacy_enabled_key: "rtkEnabled",
+    },
+    {
+      id: "headroom",
+      name: "Headroom",
+      description: "Compress context via external /v1/compress proxy before routing to the model",
+      source: "https://github.com/chopratejas/headroom",
+      default_enabled: false,
+      legacy_enabled_key: "headroomEnabled",
+      config_schema: [
+        {
+          key: "endpoint",
+          label: "Proxy URL",
+          type: "string",
+          default: "http://localhost:8787",
+          legacy_key: "headroomUrl",
+        },
+      ],
+    },
+    {
+      id: "caveman",
+      name: "Caveman",
+      description: "Terse-style system prompt → ~65% fewer output tokens (up to 87%)",
+      source: "https://github.com/caveman-ai/caveman",
+      default_enabled: false,
+      legacy_enabled_key: "cavemanEnabled",
+      config_schema: [
+        {
+          key: "cavemanLevel",
+          type: "enum",
+          default: "full",
+          legacy_key: "cavemanLevel",
+          options: [
+            { id: "lite", label: "Lite", desc: "Brief, concise answers" },
+            { id: "full", label: "Full", desc: "Short sentences, minimal filler" },
+            { id: "ultra", label: "Ultra", desc: "Telegraphic, max compression" },
+          ],
+        },
+      ],
+    },
+    {
+      id: "ponytail",
+      name: "Ponytail",
+      description: "Bias the model toward minimal code: YAGNI, reuse stdlib, deletion over addition",
+      source: "https://github.com/ponytail-ai/ponytail",
+      default_enabled: false,
+      legacy_enabled_key: "ponytailEnabled",
+      config_schema: [
+        {
+          key: "ponytailLevel",
+          type: "enum",
+          default: "full",
+          legacy_key: "ponytailLevel",
+          options: [
+            { id: "lite", label: "Lite", desc: "YAGNI nudges" },
+            { id: "full", label: "Full", desc: "Minimal code bias" },
+            { id: "ultra", label: "Ultra", desc: "YAGNI extremist, deletion first" },
+          ],
+        },
+      ],
+    },
+    {
+      id: "watermarks-remover",
+      name: "Watermarks Remover",
+      description: "Strip AI provenance marks (invisible Unicode, C2PA) and AI transition clichés from outputs.",
+      source: "https://github.com/9router/watermarks-remover",
+      default_enabled: false,
+      legacy_enabled_key: "watermarksRemoverEnabled",
+    },
+  ];
+
   const tokenSaverIds = ["rtk", "headroom", "caveman", "ponytail", "watermarks-remover"];
-  const requestPipelineSkills = skills.filter((s) => tokenSaverIds.includes(s.id));
+  const requestPipelineSkills = DEFAULT_TOKEN_SAVER_SKILLS.map((def) => {
+    const fromApi = skills.find((s) => s.id === def.id);
+    return fromApi ? { ...def, ...fromApi } : def;
+  });
 
   const headroomRunning = !!headroomStatus.running;
   const headroomStatusLabel = headroomStatus.loading
@@ -562,9 +701,29 @@ export default function TokenSaverClient() {
                     </p>
                     {skill.id === "headroom" && (
                       <>
-                        <span className={`text-xs px-2 py-0.5 rounded ${headroomRunning ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${headroomRunning ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
                           {headroomStatusLabel}
                         </span>
+                        {!headroomRunning && headroomStatus.python && !headroomStatus.installed && (
+                          <button
+                            type="button"
+                            onClick={handleAutoSetupHeadroom}
+                            disabled={autoSetupLoading}
+                            className="px-2 py-0.5 rounded text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                          >
+                            {autoSetupLoading ? "Setting up…" : "⚡ 1-Click Auto Setup"}
+                          </button>
+                        )}
+                        {!headroomRunning && headroomStatus.installed && (
+                          <button
+                            type="button"
+                            onClick={handleHeadroomStart}
+                            disabled={headroomActionLoading}
+                            className="px-2 py-0.5 rounded text-xs font-medium border border-border hover:bg-surface-2 disabled:opacity-50 transition-colors"
+                          >
+                            {headroomActionLoading ? "Starting…" : "Start"}
+                          </button>
+                        )}
                         <button type="button" onClick={() => setShowHeadroomInstallModal(true)} className="text-xs text-primary underline hover:opacity-80">
                           {headroomRunning ? "Manage" : "Setup"}
                         </button>
@@ -622,17 +781,63 @@ export default function TokenSaverClient() {
                  <div className="mb-3 ml-1 pl-3 pb-4 border-l-2 border-border">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="text-sm">Pass IDE context files to proxy</p>
-                    <Toggle checked={codeAware} onChange={() => handleCodeAware(!codeAware)} />
+                    <Toggle checked={codeAware} onChange={() => toggleExtraActive("code", !codeAware)} />
                   </div>
                   <div className="flex items-center justify-between flex-wrap gap-2 mt-4">
                     <p className="text-sm">Compress user messages</p>
-                    <Toggle checked={kompress} onChange={() => handleKompress(!kompress)} />
+                    <Toggle checked={kompress} onChange={() => toggleExtraActive("ml", !kompress)} />
                   </div>
                 </div>
               )}
             </React.Fragment>
           );
         })}
+      </Card>
+
+      {/* Context Window Trimmer & Prompt Dedup */}
+      <Card id="trimmer">
+        <div className="flex items-center justify-between py-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">content_cut</span>
+                Sliding-Window Context Trimmer & Prompt Deduplication
+              </h2>
+              <span className={`text-xs px-2 py-0.5 rounded font-medium ${tokenSaverEnabled ? "bg-success/15 text-success" : "bg-surface-3 text-text-muted"}`}>
+                {tokenSaverEnabled ? "Active" : "Disabled"}
+              </span>
+            </div>
+            <p className="text-sm text-text-muted mt-1">
+              Safely evicts older conversation turns when context nears provider limits. Strictly preserves initial system prompt, recent 3 turns, and atomic tool call/result pairs.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <Toggle checked={tokenSaverEnabled} onChange={() => handleTokenSaverToggle(!tokenSaverEnabled)} />
+          </div>
+        </div>
+
+        {tokenSaverEnabled && (
+          <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <p className="text-sm font-medium">Token Budget Threshold</p>
+                <p className="text-xs text-text-muted">Target maximum input tokens before sliding-window pruning initiates.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  value={tokenSaverBudget}
+                  onChange={(e) => setTokenSaverBudget(e.target.value)}
+                  onBlur={handleTokenSaverBudgetBlur}
+                  className="w-32 text-right font-mono text-sm"
+                  min={1000}
+                  step={1000}
+                />
+                <span className="text-xs text-text-muted">tokens</span>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Modal
@@ -659,8 +864,20 @@ export default function TokenSaverClient() {
               Open Headroom Dashboard
             </a>
           )}
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Proxy URL</p>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Proxy URL</p>
+              <button
+                type="button"
+                onClick={handleAutoDetectPort}
+                disabled={autoDetectLoading}
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                title="Scan ports 8787-8791 for active Headroom instance"
+              >
+                <span className="material-symbols-outlined text-[14px]">radar</span>
+                {autoDetectLoading ? "Scanning…" : "Auto-Detect Port"}
+              </button>
+            </div>
             <Input
               value={headroomUrl}
               onChange={(e) => setHeadroomUrl(e.target.value)}
@@ -673,19 +890,16 @@ export default function TokenSaverClient() {
               like http://headroom:8787.
             </p>
           </div>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Timeout (ms)</p>
-            <Input
-              value={String(headroomTimeoutMs)}
-              onChange={(e) => setHeadroomTimeoutMs(e.target.value)}
-              onBlur={handleHeadroomTimeoutBlur}
-              placeholder="3000"
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-text-muted">
-              Request timeout in milliseconds. Defaults to 3000 ms.
-            </p>
-          </div>
+
+          {headroomStatus.python && (
+            <div className="flex items-center justify-between text-xs px-3 py-2 rounded bg-surface-2 border border-border">
+              <span className="text-text-muted">Python Environment:</span>
+              <span className="font-mono text-text truncate max-w-[240px]" title={headroomStatus.python}>
+                Python {headroomStatus.pythonVersion || "≥ 3.10"} ✓
+              </span>
+            </div>
+          )}
+
           {headroomManaged ? (
             <Button
               onClick={handleHeadroomStop}
@@ -696,8 +910,9 @@ export default function TokenSaverClient() {
               {headroomActionLoading ? "Stopping…" : "Stop Headroom"}
             </Button>
           ) : headroomRunning ? (
-            <p className="text-sm text-success">
-              Headroom proxy is reachable. You can enable the token saver.
+            <p className="text-sm text-success font-medium flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              Headroom proxy is reachable and active.
             </p>
           ) : headroomCanStart ? (
             <Button
@@ -717,8 +932,18 @@ export default function TokenSaverClient() {
               first, or use an external proxy URL.
             </p>
           ) : (
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">Install then click Start:</p>
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={handleAutoSetupHeadroom}
+                fullWidth
+                disabled={autoSetupLoading}
+                className="font-semibold py-2.5"
+              >
+                {autoSetupLoading ? "Setting up Headroom…" : "⚡ 1-Click Auto Install & Start (Recommended)"}
+              </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-muted">Or install manually via terminal:</span>
+              </div>
               <div className="flex items-center gap-2">
                 <pre className="flex-1 rounded bg-black/5 dark:bg-white/5 p-2 text-xs font-mono overflow-x-auto">
                   {`pip install "headroom-ai[proxy]"`}
@@ -733,6 +958,15 @@ export default function TokenSaverClient() {
                   {copied ? "Copied" : "Copy"}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {(autoSetupLoading || installLog) && (
+            <div className="flex flex-col gap-1 mt-1">
+              <p className="text-xs font-medium text-text-muted">Install Progress Log:</p>
+              <pre className="p-2 rounded bg-black/10 dark:bg-black/40 text-[11px] font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+                {installLog || autoSetupMessage || "Running pip install..."}
+              </pre>
             </div>
           )}
           {headroomActionError && (
