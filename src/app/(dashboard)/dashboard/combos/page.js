@@ -48,6 +48,16 @@ export default function CombosPage() {
   const [combos, setCombos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSuggestModal, setShowSuggestModal] = useState(false);
+  const [suggestWeights, setSuggestWeights] = useState({ reliability: 0.4, latency: 0.3, cost: 0.2, quality: 0.1 });
+  const [suggestedModels, setSuggestedModels] = useState([]);
+  const [testedDetails, setTestedDetails] = useState([]);
+  const [suggestSummary, setSuggestSummary] = useState({ total: 0, working: 0, failed: 0 });
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestName, setSuggestName] = useState("auto-recommended");
+  const [suggestError, setSuggestError] = useState("");
+  const [suggestPrompt, setSuggestPrompt] = useState("");
+  const [suggestContext, setSuggestContext] = useState(null);
   const [editingCombo, setEditingCombo] = useState(null);
   const [activeProviders, setActiveProviders] = useState([]);
   const [comboStrategies, setComboStrategies] = useState({});
@@ -71,8 +81,13 @@ export default function CombosPage() {
       const providersData = await providersRes.json();
       const settingsData = settingsRes.ok ? await settingsRes.json() : {};
       
-      // Only LLM combos here - webSearch/webFetch combos belong to media-providers/web
-      if (combosRes.ok) setCombos((combosData.combos || []).filter(c => !c.kind || c.kind === "llm"));
+      if (combosRes.ok) {
+        const filtered = (combosData.combos || []).filter(c => {
+          if (c.kind && c.kind !== "llm" && c.kind !== "auto") return false;
+          return true;
+        });
+        setCombos(filtered);
+      }
       if (providersRes.ok) {
         setActiveProviders(providersData.connections || []);
       }
@@ -184,6 +199,67 @@ export default function CombosPage() {
     }
   };
 
+  const handleOpenSuggestModal = async () => {
+    setShowSuggestModal(true);
+    setSuggestError("");
+    await runSuggest(suggestWeights, false, suggestPrompt);
+  };
+
+  const runSuggest = async (weights, force = false, prompt = "") => {
+    setSuggestLoading(true);
+    setSuggestError("");
+    try {
+      const q = new URLSearchParams({
+        weights: `${weights.reliability},${weights.latency},${weights.cost},${weights.quality}`,
+        force: force ? "true" : "false",
+      });
+      if (prompt && prompt.trim()) {
+        q.set("prompt", prompt.trim());
+      }
+      const res = await fetch(`/api/combos/suggest?${q.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSuggestedModels(data.models || []);
+        setTestedDetails(data.tested || []);
+        setSuggestSummary(data.summary || { total: 0, working: 0, failed: 0 });
+        setSuggestContext(data.context || null);
+      } else {
+        const err = await res.json();
+        setSuggestError(err.error || "Failed to fetch suggestion");
+      }
+    } catch (e) {
+      setSuggestError("Failed to fetch suggestion");
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  const handleAcceptSuggestion = async () => {
+    if (!suggestName.trim() || suggestedModels.length === 0) return;
+    try {
+      const res = await fetch("/api/combos/suggest/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: suggestName.trim(),
+          models: suggestedModels,
+          weights: suggestWeights,
+          prompt: suggestPrompt.trim() || undefined,
+        })
+      });
+      if (res.ok) {
+        setShowSuggestModal(false);
+        setSuggestPrompt(""); // Clear prompt after accept
+        await fetchData();
+      } else {
+        const err = await res.json();
+        setSuggestError(err.error || "Failed to save suggested combo");
+      }
+    } catch (e) {
+      setSuggestError("Failed to save combo");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -207,9 +283,14 @@ export default function CombosPage() {
             <li><span className="font-medium text-text-main">Fusion</span> — queries all models in parallel, then a judge synthesizes one answer. Best quality, but costs the most: every request bills all panel models + the judge (N+1 calls)</li>
           </ul>
         </div>
-        <Button icon="add" onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto whitespace-nowrap">
-          Create Combo
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <Button variant="secondary" icon="auto_awesome" onClick={handleOpenSuggestModal} className="w-full sm:w-auto whitespace-nowrap">
+            Auto-Suggest Combo
+          </Button>
+          <Button icon="add" onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto whitespace-nowrap">
+            Create Combo
+          </Button>
+        </div>
       </div>
 
       {/* Combos List */}
@@ -273,6 +354,255 @@ export default function CombosPage() {
           onSave={(data) => handleUpdate(editingCombo.id, data)}
           activeProviders={activeProviders}
         />
+      )}
+
+      {/* Auto-Suggest Modal */}
+      {showSuggestModal && (
+        <Modal
+          isOpen={showSuggestModal}
+          onClose={() => setShowSuggestModal(false)}
+          title="Auto-Suggest Best Combo"
+        >
+          <div className="flex flex-col gap-5">
+            <p className="text-sm text-text-muted">
+              Automatically finds and sorts your best provider models based on what matters most to you. Adjust the priorities below to rank them:
+            </p>
+
+            <div className="flex flex-col gap-4 bg-surface-2 p-4 rounded-lg border border-border">
+              {/* Reliability / Uptime */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-success">verified</span>
+                    <span className="text-text-main font-semibold">Reliability (Success Rate)</span>
+                  </div>
+                  <span className="text-text-muted">{Math.round(suggestWeights.reliability * 100)}%</span>
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Prioritizes models with the fewest errors and highest uptime.
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={suggestWeights.reliability}
+                  onChange={(e) => {
+                    const next = { ...suggestWeights, reliability: parseFloat(e.target.value) };
+                    setSuggestWeights(next);
+                    runSuggest(next, false, suggestPrompt);
+                  }}
+                  className="w-full accent-primary"
+                />
+              </div>
+
+              {/* Latency / Speed */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-primary">bolt</span>
+                    <span className="text-text-main font-semibold">Speed (Response Time)</span>
+                  </div>
+                  <span className="text-text-muted">{Math.round(suggestWeights.latency * 100)}%</span>
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Prioritizes models that respond the fastest with low latency.
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={suggestWeights.latency}
+                  onChange={(e) => {
+                    const next = { ...suggestWeights, latency: parseFloat(e.target.value) };
+                    setSuggestWeights(next);
+                    runSuggest(next, false, suggestPrompt);
+                  }}
+                  className="w-full accent-primary"
+                />
+              </div>
+
+              {/* Cost Savings */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-warning">savings</span>
+                    <span className="text-text-main font-semibold">Cost Savings (Affordability)</span>
+                  </div>
+                  <span className="text-text-muted">{Math.round(suggestWeights.cost * 100)}%</span>
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Prioritizes free-tier or lower-cost models to save budget.
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={suggestWeights.cost}
+                  onChange={(e) => {
+                    const next = { ...suggestWeights, cost: parseFloat(e.target.value) };
+                    setSuggestWeights(next);
+                    runSuggest(next, false, suggestPrompt);
+                  }}
+                  className="w-full accent-primary"
+                />
+              </div>
+
+              {/* Quality Tier - NEW */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center text-xs font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-purple-400">stars</span>
+                    <span className="text-text-main font-semibold">Quality Tier (Flagship Models)</span>
+                  </div>
+                  <span className="text-text-muted">{Math.round(suggestWeights.quality * 100)}%</span>
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Prioritizes reasoning/flagship models (o1, GPT-5, Claude Sonnet) over mini variants.
+                </p>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={suggestWeights.quality}
+                  onChange={(e) => {
+                    const next = { ...suggestWeights, quality: parseFloat(e.target.value) };
+                    setSuggestWeights(next);
+                    runSuggest(next, false, suggestPrompt);
+                  }}
+                  className="w-full accent-primary"
+                />
+              </div>
+            </div>
+
+            {/* Smart Prompt Input */}
+            <div>
+              <label className="block text-sm font-medium mb-1.5 flex items-center gap-2">
+                <span className="material-symbols-outlined text-sm text-primary">psychology</span>
+                Task Context (Optional)
+              </label>
+              <p className="text-xs text-text-muted mb-2">
+                Describe your task for smarter suggestions (e.g., "debug algorithm" → reasoning models prioritized)
+              </p>
+              <textarea
+                value={suggestPrompt}
+                onChange={(e) => setSuggestPrompt(e.target.value)}
+                onBlur={() => runSuggest(suggestWeights, false, suggestPrompt)}
+                placeholder="E.g., analyze architecture, quick formatting, debug performance..."
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface-1 text-text-main text-sm resize-none focus:ring-2 focus:ring-primary focus:border-primary"
+                rows={2}
+              />
+              {suggestContext && (
+                <div className="mt-2 flex items-center gap-2 text-xs flex-wrap">
+                  <span className="px-2 py-1 rounded bg-primary/10 text-primary font-medium">
+                    {suggestContext.complexity === 'reasoning' && '🧠 Complex'}
+                    {suggestContext.complexity === 'mini' && '⚡ Simple'}
+                    {suggestContext.complexity === 'standard' && '📋 Standard'}
+                  </span>
+                  {suggestContext.needsReasoning && (
+                    <span className="px-2 py-1 rounded bg-purple-500/10 text-purple-400">Deep Reasoning</span>
+                  )}
+                  {suggestContext.needsCode && (
+                    <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400">Code-Heavy</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Combo Name</label>
+              <Input
+                value={suggestName}
+                onChange={(e) => setSuggestName(e.target.value)}
+                placeholder="e.g. auto-recommended"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium">Verified Active Models</label>
+                <div className="flex items-center gap-2">
+                  {suggestSummary.total > 0 && (
+                    <span className="text-[11px] text-text-muted">
+                      {suggestSummary.working}/{suggestSummary.total} models verified
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => runSuggest(suggestWeights, true, suggestPrompt)}
+                    disabled={suggestLoading}
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
+                  >
+                    <span className={`material-symbols-outlined text-xs ${suggestLoading ? "animate-spin" : ""}`}>
+                      refresh
+                    </span>
+                    Re-test
+                  </button>
+                </div>
+              </div>
+
+              {suggestLoading ? (
+                <div className="py-6 text-center text-sm text-text-muted flex flex-col items-center gap-2">
+                  <span className="material-symbols-outlined animate-spin text-xl text-primary">sync</span>
+                  <span>Probing provider models with minimal token usage & measuring latency...</span>
+                </div>
+              ) : suggestedModels.length === 0 ? (
+                <div className="py-4 text-center text-xs text-text-muted">
+                  No working models found. Please check your provider connection credentials.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto border border-border rounded-lg p-2 bg-surface-1">
+                  {suggestedModels.map((m, idx) => {
+                    const detail = testedDetails.find((d) => d.model === m || d.modelId === m);
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded bg-surface-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-success text-xs font-semibold">✓</span>
+                          <span className="font-mono text-text-main font-medium truncate">{m}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {detail?.latencyMs !== undefined && detail.latencyMs > 0 && (
+                            <span className="text-[11px] font-mono text-text-muted px-1.5 py-0.5 rounded bg-surface-3">
+                              {detail.latencyMs}ms
+                            </span>
+                          )}
+                          <span className="text-text-muted text-[11px]">Rank #{idx + 1}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Show failed models if any */}
+              {testedDetails.some((d) => !d.ok) && (
+                <div className="mt-2 text-[11px] text-text-muted">
+                  <span className="text-danger font-medium">Excluded {testedDetails.filter((d) => !d.ok).length} failing/unavailable model(s):</span>{" "}
+                  {testedDetails.filter((d) => !d.ok).map((d) => d.model || d.modelId).join(", ")}
+                </div>
+              )}
+            </div>
+
+            {suggestError && (
+              <p className="text-xs text-danger">{suggestError}</p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button variant="secondary" onClick={() => setShowSuggestModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAcceptSuggestion}
+                disabled={suggestLoading || suggestedModels.length === 0 || !suggestName.trim()}
+              >
+                Accept & Create Combo
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Confirm Delete Modal */}
