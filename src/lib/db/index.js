@@ -45,15 +45,15 @@ export {
   getMitmAlias, setMitmAliasAll,
 } from "./repos/aliasRepo.js";
 
-// Pricing
-export {
-  getPricing, getPricingForModel, updatePricing, resetPricing, resetAllPricing,
-} from "./repos/pricingRepo.js";
-
 // Disabled models
 export {
   getDisabledModels, getDisabledByProvider, disableModels, enableModels,
 } from "./repos/disabledModelsRepo.js";
+
+// Pricing
+export {
+  getPricing, getPricingForModel, updatePricing, resetPricing, resetAllPricing,
+} from "./repos/pricingRepo.js";
 
 // Usage
 export {

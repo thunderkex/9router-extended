@@ -1,0 +1,1 @@
+You must format all commit messages according to the Conventional Commits specification. Use type(scope): subject format.
