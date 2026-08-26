@@ -5,6 +5,7 @@ import {
   updateProviderConnection,
   deleteProviderConnection,
 } from "@/models";
+import { probeProviderModels } from "@/lib/routing/modelProbe";
 
 function normalizeProxyConfig(body = {}) {
   const hasAnyProxyField =
@@ -156,6 +157,10 @@ export async function PUT(request, { params }) {
     }
 
     const updated = await updateProviderConnection(id, updateData);
+
+    if (updated && updated.isActive !== false) {
+      probeProviderModels(updated, { force: true }).catch(() => {});
+    }
 
     // Hide sensitive fields
     const result = { ...updated };

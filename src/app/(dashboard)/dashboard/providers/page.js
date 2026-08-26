@@ -25,6 +25,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
 import ModelAvailabilityBadge from "./components/ModelAvailabilityBadge";
 import AddCompatibleModal from "./components/AddCompatibleModal";
+import RoutingHealthMonitor from "./components/RoutingHealthMonitor";
 
 function getStatusDisplay(connected, error, errorCode) {
   const parts = [];
@@ -365,6 +366,9 @@ export default function ProvidersPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6 px-1 sm:px-0">
+      {/* Live Routing Health & Circuit Breaker Monitor (Phase 2 & 5 Hardening) */}
+      <RoutingHealthMonitor />
+
       {!hasAnyResult && (
         <div className="text-center py-8 border border-dashed border-border rounded-xl">
           <span className="material-symbols-outlined text-[32px] text-text-muted mb-2">

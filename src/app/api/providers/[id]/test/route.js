@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { testSingleConnection } from "./testUtils.js";
+import { getProviderConnectionById } from "@/lib/localDb";
+import { probeProviderModels } from "@/lib/routing/modelProbe";
 
 // POST /api/providers/[id]/test - Test connection
 export async function POST(request, { params }) {
@@ -9,6 +11,12 @@ export async function POST(request, { params }) {
 
     if (result.error === "Connection not found") {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 });
+    }
+
+    if (result.valid) {
+      getProviderConnectionById(id).then((conn) => {
+        if (conn) probeProviderModels(conn, { force: true }).catch(() => {});
+      }).catch(() => {});
     }
 
     return NextResponse.json({
