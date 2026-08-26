@@ -1,0 +1,19 @@
+{
+  "id": "human-handwritten",
+  "name": "Human Handwritten & Anti-Slop",
+  "description": "Enforces natural human phrasing, zero AI slop, no robotic transition cliches, clean code without useless comments, and verified functional solutions.",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "default_enabled": true,
+  "source": "custom",
+  "config_schema": [
+    {
+      "key": "strictness",
+      "label": "Anti-Slop Strictness",
+      "type": "slider",
+      "min": 1,
+      "max": 10,
+      "default": 10
+    }
+  ]
+}

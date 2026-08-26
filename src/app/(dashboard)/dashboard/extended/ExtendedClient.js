@@ -3,6 +3,34 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, Button, Toggle, Badge, Modal, Input, ConfigSlider, ConfirmModal } from "@/shared/components";
 
+const DEFAULT_PRE_ROUTE_SCRIPT = `/**
+ * Pre-Route Hook
+ * Executes before request resolution and provider forwarding.
+ * @param {object} body - OpenAI/Claude/Gemini request payload
+ * @param {object} context - { provider, model, sessionId, headers }
+ * @returns {Promise<object>|object} Modified request body
+ */
+export async function preRoute(body, context) {
+  // Example: Append a tracking metadata tag or inspect messages
+  if (body && body.messages) {
+    // console.log("[PreRoute Hook] Processing request for model:", context.model);
+  }
+  return body;
+}`;
+
+const DEFAULT_POST_RESPONSE_SCRIPT = `/**
+ * Post-Response Hook
+ * Intercepts and transforms upstream JSON responses before returning to client.
+ * @param {object} response - Provider response payload
+ * @param {object} context - { provider, model, sessionId }
+ * @returns {Promise<object>|object} Modified response object
+ */
+export async function postResponse(response, context) {
+  // Example: Sanitize output or audit response metadata
+  // console.log("[PostResponse Hook] Intercepted response from:", context.provider);
+  return response;
+}`;
+
 const PRESET_TEMPLATES = [
   {
     name: "UI Design Taste Rule",
@@ -56,6 +84,50 @@ Dynamic Configuration:
     ],
   },
   {
+    name: "Pre-Route Context & Header Hook",
+    icon: "alt_route",
+    desc: "Middleware executing before model resolution & upstream routing",
+    hook: "pre-route",
+    category: "middleware",
+    id: "pre-route-header-guard",
+    skillName: "Pre-Route Header & Context Guard",
+    description: "Intercepts request payloads to inject custom context headers or enforce metadata before routing.",
+    hook_script: `/**
+ * Pre-Route Hook
+ * Executes before request resolution and provider forwarding.
+ */
+export async function preRoute(body, context) {
+  if (body && Array.isArray(body.messages)) {
+    // Example: append a context timestamp or audit tag
+    // console.log("[PreRoute] Forwarding request to:", context.model);
+  }
+  return body;
+}`,
+    config_schema: [],
+  },
+  {
+    name: "Post-Response Filter & Audit Hook",
+    icon: "transform",
+    desc: "Intercepts and sanitizes model output payloads before returning to client",
+    hook: "post-response",
+    category: "middleware",
+    id: "post-response-sanitizer",
+    skillName: "Post-Response Output Filter",
+    description: "Intercepts upstream JSON responses to remove unwanted watermarks or compute audit logs.",
+    hook_script: `/**
+ * Post-Response Hook
+ * Intercepts upstream JSON responses before returning to client.
+ */
+export async function postResponse(response, context) {
+  if (response && response.choices && response.choices[0]?.message?.content) {
+    // Example: sanitize or strip unwanted patterns
+    // response.choices[0].message.content = response.choices[0].message.content.trim();
+  }
+  return response;
+}`,
+    config_schema: [],
+  },
+  {
     name: "Custom MCP Agent Tool",
     icon: "terminal",
     desc: "Integrate any external CLI or MCP package tool workflow",
@@ -82,12 +154,13 @@ export default function ExtendedClient() {
   // Studio Modal State
   const [showStudioModal, setShowStudioModal] = useState(false);
   const [studioTab, setStudioTab] = useState("form"); // 'form' | 'preview'
-  const [formHook, setFormHook] = useState("system-prompt"); // 'system-prompt' | 'install-cli'
+  const [formHook, setFormHook] = useState("system-prompt");
   const [formId, setFormId] = useState("");
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
   const [formSource, setFormSource] = useState("");
   const [formPrompt, setFormPrompt] = useState("");
+  const [formHookScript, setFormHookScript] = useState(DEFAULT_PRE_ROUTE_SCRIPT);
   const [formInstallCmd, setFormInstallCmd] = useState("");
   const [formUninstallCmd, setFormUninstallCmd] = useState("");
   const [formConfigs, setFormConfigs] = useState([]);
@@ -191,6 +264,10 @@ export default function ExtendedClient() {
     setFormName(tmpl.skillName);
     setFormDesc(tmpl.description);
     setFormPrompt(tmpl.prompt || "");
+    setFormHookScript(
+      tmpl.hook_script ||
+      (tmpl.hook === "post-response" ? DEFAULT_POST_RESPONSE_SCRIPT : DEFAULT_PRE_ROUTE_SCRIPT)
+    );
     setFormInstallCmd(tmpl.install_command || "");
     setFormUninstallCmd(tmpl.uninstall_command || "");
     setFormSource(tmpl.source || "");
@@ -225,11 +302,15 @@ export default function ExtendedClient() {
   };
 
   const generatedManifest = useMemo(() => {
+    let category = "prompt-injection";
+    if (formHook === "install-cli") category = "agent-skill";
+    else if (formHook === "pre-route" || formHook === "post-response" || formHook === "pre-request") category = "middleware";
+
     const manifest = {
       id: formId.toLowerCase().replace(/[^a-z0-9-]/g, "-") || "custom-skill",
       name: formName || "Custom Skill",
       description: formDesc || "Custom module for 9Router.",
-      category: formHook === "install-cli" ? "agent-skill" : "prompt-injection",
+      category,
       hook: formHook,
       default_enabled: true,
       source: formSource || "custom",
@@ -250,6 +331,7 @@ export default function ExtendedClient() {
       const payload = {
         ...generatedManifest,
         prompt_template: formHook === "system-prompt" ? formPrompt : undefined,
+        hook_script: (formHook === "pre-route" || formHook === "post-response") ? formHookScript : undefined,
       };
 
       const res = await fetch("/api/skills", {
@@ -587,9 +669,45 @@ export default function ExtendedClient() {
                   >
                     <span className="material-symbols-outlined text-[24px] text-primary shrink-0 mt-0.5">psychology</span>
                     <div>
-                      <div className="font-semibold text-xs text-text-main">System Prompt / Rule Injector</div>
+                      <div className="font-semibold text-xs text-text-main">System Prompt / Rule</div>
                       <div className="text-[11px] text-text-muted mt-0.5">
-                        Injected directly before model execution (Claude, OpenAI, Gemini, Codex).
+                        Injected directly into system prompt (Claude, OpenAI, Gemini).
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormHook("pre-route")}
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      formHook === "pre-route"
+                        ? "border-primary bg-primary/10 text-text-main ring-1 ring-primary shadow-xs"
+                        : "border-border bg-surface text-text-muted hover:text-text-main hover:bg-surface-2"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[24px] text-primary shrink-0 mt-0.5">alt_route</span>
+                    <div>
+                      <div className="font-semibold text-xs text-text-main">Pre-Route Hook</div>
+                      <div className="text-[11px] text-text-muted mt-0.5">
+                        Middleware executing before model resolution & upstream routing.
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormHook("post-response")}
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      formHook === "post-response"
+                        ? "border-primary bg-primary/10 text-text-main ring-1 ring-primary shadow-xs"
+                        : "border-border bg-surface text-text-muted hover:text-text-main hover:bg-surface-2"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[24px] text-primary shrink-0 mt-0.5">transform</span>
+                    <div>
+                      <div className="font-semibold text-xs text-text-main">Post-Response Hook</div>
+                      <div className="text-[11px] text-text-muted mt-0.5">
+                        Intercepts, sanitizes, or audits model response payloads.
                       </div>
                     </div>
                   </button>
@@ -661,6 +779,26 @@ export default function ExtendedClient() {
                     onChange={(e) => setFormPrompt(e.target.value)}
                     placeholder="When writing code, always follow domain separation..."
                     rows={6}
+                    className="w-full p-3.5 rounded-xl border border-border bg-surface text-xs focus:outline-none focus:border-primary font-mono leading-relaxed custom-scrollbar shadow-2xs"
+                  />
+                </div>
+              )}
+
+              {/* Pre-Route / Post-Response Hook Script Editor */}
+              {(formHook === "pre-route" || formHook === "post-response") && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-text-main">
+                      Hook Implementation (hook.js)
+                    </label>
+                    <span className="text-[11px] text-text-muted font-mono">
+                      {formHook === "pre-route" ? "export async function preRoute(body, context)" : "export async function postResponse(response, context)"}
+                    </span>
+                  </div>
+                  <textarea
+                    value={formHookScript}
+                    onChange={(e) => setFormHookScript(e.target.value)}
+                    rows={8}
                     className="w-full p-3.5 rounded-xl border border-border bg-surface text-xs focus:outline-none focus:border-primary font-mono leading-relaxed custom-scrollbar shadow-2xs"
                   />
                 </div>
