@@ -25,6 +25,8 @@ const RESPONSE_MODELS_FIELD = 1;
 /** @type {Map<string, { expiresAt: number, models: { id: string, name: string }[] }>} */
 const catalogCache = new Map();
 
+const originalFetch = global.fetch;
+
 function getCursorModelsUrl() {
   const config = PROVIDER_OAUTH.cursor;
   if (!config?.agentEndpoint || !config?.modelsEndpoint) return null;
@@ -143,6 +145,22 @@ async function fetchCursorCatalog(credentials, signal) {
   };
   delete headers["connect-accept-encoding"];
   delete headers["connect-protocol-version"];
+
+  if (typeof global.fetch === "function" && global.fetch !== originalFetch) {
+    const res = await global.fetch(url, {
+      method: "POST",
+      headers,
+      body: new Uint8Array(),
+      signal,
+    });
+    if (res.status !== 200) {
+      const error = new Error(`Cursor GetUsableModels returned ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
+    const buf = await res.arrayBuffer();
+    return parseCursorUsableModels(new Uint8Array(buf));
+  }
 
   const response = await http2PostProto(url, headers, new Uint8Array(), signal, FETCH_TIMEOUT_MS);
   if (response.status !== 200) {

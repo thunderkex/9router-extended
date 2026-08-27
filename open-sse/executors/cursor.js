@@ -4,6 +4,7 @@ import { HTTP_STATUS } from "../config/runtimeConfig.js";
 import {
   generateCursorBody,
   encodeField,
+  encodeMcpTools,
   wrapConnectRPCFrame,
   decodeMessage,
   parseConnectRPCFrame,
@@ -70,20 +71,35 @@ function textFromContent(content) {
     .join("\n");
 }
 
-function isAgentTextRequest(body) {
-  // Many compatible clients always attach their built-in tool schemas, even
-  // for a normal text turn. Cursor's retired ChatService rejects those
-  // requests; AgentService can still answer the text turn, so ignore schemas
-  // here. A real tool-call/result conversation is kept on the legacy path
-  // until its AgentService tool protocol is implemented.
-  return Array.isArray(body?.messages) && body.messages.every((message) => {
-    if (message?.tool_calls?.length || message?.role === "tool") return false;
-    return typeof message?.content === "string"
-      || Array.isArray(message?.content) && message.content.every((part) => part?.type === "text");
+export function isAgentCapableRequest(body) {
+  if (!body || !Array.isArray(body.messages) || body.messages.length === 0) return false;
+  return body.messages.every((message) => {
+    if (typeof message?.content === "string") return true;
+    if (message?.content === null || message?.content === undefined) {
+      if (Array.isArray(message?.tool_calls) || message?.role === "tool") return true;
+    }
+    if (Array.isArray(message?.content)) {
+      return message.content.every((part) => part?.type === "text");
+    }
+    return false;
   });
 }
 
 function encodeHistoryMessage(message) {
+  if (message.role === "tool") {
+    // Tool result message in history
+    const content = textFromContent(message.content);
+    const toolCallId = message.tool_call_id || "";
+    // UserMessage / tool response
+    const text = agentString(1, content);
+    return agentMessage(1, agentMessage(1, agentMessage(1, text)));
+  }
+
+  if (message.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length) {
+    const text = agentString(1, textFromContent(message.content) || "");
+    return agentMessage(2, agentMessage(1, agentMessage(1, text)));
+  }
+
   const content = textFromContent(message?.content);
   if (!content) return null;
 
@@ -95,7 +111,7 @@ function encodeHistoryMessage(message) {
   return agentMessage(1, agentMessage(1, agentMessage(1, text)));
 }
 
-function buildAgentRunFrame(messages, model) {
+export function buildAgentRunFrame(messages, model, tools = []) {
   const system = messages
     .filter((message) => message?.role === "system")
     .map((message) => textFromContent(message.content))
@@ -124,10 +140,14 @@ function buildAgentRunFrame(messages, model) {
   );
   const conversationAction = agentMessage(1, userAction);
   const requestedModel = concatBuffers(agentString(1, model), agentBool(7, true));
+
+  const encodedTools = encodeMcpTools(tools);
+
   const runRequest = concatBuffers(
     // An empty ConversationStateStructure starts a fresh local agent session.
     agentMessage(1, new Uint8Array()),
     agentMessage(2, conversationAction),
+    ...(encodedTools.length ? [agentMessage(4, encodedTools)] : []),
     ...(system ? [agentString(8, system)] : []),
     agentMessage(9, requestedModel),
   );
