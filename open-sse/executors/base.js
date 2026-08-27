@@ -148,19 +148,22 @@ export class BaseExecutor {
           signal: mergedSignal
         }, proxyOptions);
         clearTimeout(connectTimer);
-        const ct = response.headers?.get?.("content-type") || "";
-        const cl = response.headers?.get?.("content-length") || "?";
-        dbg("FETCH", `${this.provider.toUpperCase()} ← ${response.status} | ttft=${Date.now() - fetchT0}ms | ct=${ct} | cl=${cl}`);
+        const ct = response?.headers?.get?.("content-type") || "";
+        const cl = response?.headers?.get?.("content-length") || "?";
+        dbg("FETCH", `${this.provider.toUpperCase()} ← ${response?.status} | ttft=${Date.now() - fetchT0}ms | ct=${ct} | cl=${cl}`);
 
-        if (await tryRetry(urlIndex, response.status, `status ${response.status}`, response)) { urlIndex--; continue; }
+        if (response && await tryRetry(urlIndex, response.status, `status ${response.status}`, response)) { urlIndex--; continue; }
 
-        if (this.shouldRetry(response.status, urlIndex)) {
+        if (response && this.shouldRetry(response.status, urlIndex)) {
           log?.debug?.("RETRY", `${response.status} on ${url}, trying fallback ${urlIndex + 1}`);
           lastStatus = response.status;
+          lastError = Object.assign(new Error(`HTTP ${response.status}`), { status: response.status, response });
           continue;
         }
 
-        return { response, url, headers, transformedBody };
+        if (response) {
+          return { response, url, headers, transformedBody };
+        }
       } catch (error) {
         clearTimeout(connectTimer);
         lastError = error;
