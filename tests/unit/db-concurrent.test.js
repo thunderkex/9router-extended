@@ -17,8 +17,15 @@ beforeAll(async () => {
   await db.initDb();
 });
 
-afterAll(() => {
-  if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+afterAll(async () => {
+  try {
+    const { getAdapter } = await import("@/lib/db/driver.js");
+    const adapter = await getAdapter();
+    if (adapter && adapter.close) adapter.close();
+  } catch {}
+  if (tempDir) {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+  }
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
 });

@@ -8,6 +8,12 @@ const originalDataDir = process.env.DATA_DIR;
 async function setupDb() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "9router-model-routing-"));
   process.env.DATA_DIR = tempDir;
+  if (global._dbAdapter) {
+    if (global._dbAdapter.instance?.close) {
+      try { global._dbAdapter.instance.close(); } catch {}
+    }
+    global._dbAdapter = null;
+  }
   vi.resetModules();
 
   const { createProviderNode } = await import("@/models/index.js");
@@ -16,8 +22,16 @@ async function setupDb() {
   return {
     createProviderNode,
     getModelInfo,
-    cleanup() {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    async cleanup() {
+      if (global._dbAdapter) {
+        if (global._dbAdapter.instance?.close) {
+          try { global._dbAdapter.instance.close(); } catch {}
+        }
+        global._dbAdapter = null;
+      }
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
     },
   };
 }
@@ -29,10 +43,10 @@ describe("model routing", () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    cleanup();
+    await cleanup();
     cleanup = () => {};
     if (originalDataDir === undefined) delete process.env.DATA_DIR;
     else process.env.DATA_DIR = originalDataDir;
