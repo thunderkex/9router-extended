@@ -46,16 +46,26 @@ export function getCachedProbeResults() {
  * Resolve candidate models for a given provider connection.
  * Returns custom models, registry models, or connection models minus disabled ones.
  */
-export async function resolveConnectionModels(connection, { customModels = null, disabledModels = null } = {}) {
+export function resolveConnectionModels(connection, { customModels = null, disabledModels = null } = {}) {
   if (!connection || !connection.provider) return [];
   const providerId = connection.provider;
   const alias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
 
   if (!customModels) {
-    try { customModels = await getCustomModels(); } catch { customModels = []; }
+    try {
+      const res = getCustomModels();
+      customModels = Array.isArray(res) ? res : [];
+    } catch {
+      customModels = [];
+    }
   }
   if (!disabledModels) {
-    try { disabledModels = await getDisabledModels(); } catch { disabledModels = {}; }
+    try {
+      const res = getDisabledModels();
+      disabledModels = res && typeof res === "object" ? res : {};
+    } catch {
+      disabledModels = {};
+    }
   }
 
   const disabledList = Array.isArray(disabledModels[alias]) ? disabledModels[alias] : [];
@@ -107,6 +117,17 @@ export async function resolveConnectionModels(connection, { customModels = null,
           alias,
         });
       }
+    }
+    if (connection.defaultModel && !candidates.some((c) => c.id === connection.defaultModel)) {
+      const regDef = registryModels.find((rm) => rm.id === connection.defaultModel);
+      candidates.unshift({
+        id: connection.defaultModel,
+        modelKey: connection.defaultModel.includes("/") ? connection.defaultModel : `${alias}/${connection.defaultModel}`,
+        name: regDef?.name || connection.defaultModel,
+        kind: "llm",
+        provider: providerId,
+        alias,
+      });
     }
     if (candidates.length > 0) return candidates;
   }

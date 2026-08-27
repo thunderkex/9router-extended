@@ -191,7 +191,7 @@ export function getProviderHealthSnapshot() {
  * @param {object} [promptContext]   - Optional prompt analysis for context-aware ranking
  * @returns {string[]}               - Ordered model strings ["provider/model", ...]
  */
-export async function buildAutoCombo(
+export function buildAutoCombo(
   connections,
   weights = { reliability: 0.4, latency: 0.3, cost: 0.2, quality: 0.1 },
   pricingMap = {},
