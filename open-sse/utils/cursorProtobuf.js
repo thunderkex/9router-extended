@@ -207,6 +207,20 @@ export function encodeField(fieldNum, wireType, value) {
     return concatArrays(tagBytes, valueBytes);
   }
 
+  if (wireType === WIRE_TYPE.FIXED64) {
+    const dataBytes = Buffer.isBuffer(value) ? new Uint8Array(value)
+      : value instanceof Uint8Array ? value
+      : new Uint8Array(8);
+    return concatArrays(tagBytes, dataBytes);
+  }
+
+  if (wireType === WIRE_TYPE.FIXED32) {
+    const dataBytes = Buffer.isBuffer(value) ? new Uint8Array(value)
+      : value instanceof Uint8Array ? value
+      : new Uint8Array(4);
+    return concatArrays(tagBytes, dataBytes);
+  }
+
   if (wireType === WIRE_TYPE.LEN) {
     const dataBytes = typeof value === "string" 
       ? new TextEncoder().encode(value)
@@ -230,6 +244,153 @@ function concatArrays(...arrays) {
     offset += arr.length;
   }
   return result;
+}
+
+// ==================== AGENTSERVICE PROTOBUF VALUE & MCP CODECS ====================
+
+export function encodeAgentValue(val) {
+  if (val === null || val === undefined) {
+    return encodeField(1, WIRE_TYPE.VARINT, 0);
+  }
+  if (typeof val === "number") {
+    const buf = Buffer.alloc(8);
+    buf.writeDoubleLE(val);
+    return encodeField(2, WIRE_TYPE.FIXED64, buf);
+  }
+  if (typeof val === "string") {
+    return encodeField(3, WIRE_TYPE.LEN, val);
+  }
+  if (typeof val === "boolean") {
+    return encodeField(4, WIRE_TYPE.VARINT, val ? 1 : 0);
+  }
+  if (Array.isArray(val)) {
+    const items = val.map(item => encodeField(1, WIRE_TYPE.LEN, encodeAgentValue(item)));
+    const listValue = concatArrays(...items);
+    return encodeField(6, WIRE_TYPE.LEN, listValue);
+  }
+  if (typeof val === "object") {
+    const entries = Object.entries(val).map(([k, v]) => {
+      const entry = concatArrays(
+        encodeField(1, WIRE_TYPE.LEN, k),
+        encodeField(2, WIRE_TYPE.LEN, encodeAgentValue(v))
+      );
+      return encodeField(1, WIRE_TYPE.LEN, entry);
+    });
+    const structValue = concatArrays(...entries);
+    return encodeField(5, WIRE_TYPE.LEN, structValue);
+  }
+  return encodeField(1, WIRE_TYPE.VARINT, 0);
+}
+
+export function decodeAgentValue(bytes) {
+  const msg = decodeMessage(bytes instanceof Uint8Array || Buffer.isBuffer(bytes) ? bytes : new Uint8Array(0));
+  if (msg.has(1)) return null;
+  if (msg.has(2)) {
+    const buf = Buffer.from(msg.get(2)[0].value);
+    return buf.length >= 8 ? buf.readDoubleLE(0) : 0;
+  }
+  if (msg.has(3)) {
+    return textDecoder.decode(msg.get(3)[0].value);
+  }
+  if (msg.has(4)) {
+    const v = msg.get(4)[0].value;
+    return v === 1 || v === true;
+  }
+  if (msg.has(5)) {
+    const structMsg = decodeMessage(msg.get(5)[0].value);
+    const obj = {};
+    if (structMsg.has(1)) {
+      for (const entryItem of structMsg.get(1)) {
+        const entryMsg = decodeMessage(entryItem.value);
+        const k = entryMsg.has(1) ? textDecoder.decode(entryMsg.get(1)[0].value) : "";
+        const v = entryMsg.has(2) ? decodeAgentValue(entryMsg.get(2)[0].value) : null;
+        if (k) obj[k] = v;
+      }
+    }
+    return obj;
+  }
+  if (msg.has(6)) {
+    const listMsg = decodeMessage(msg.get(6)[0].value);
+    const arr = [];
+    if (listMsg.has(1)) {
+      for (const item of listMsg.get(1)) {
+        arr.push(decodeAgentValue(item.value));
+      }
+    }
+    return arr;
+  }
+  return null;
+}
+
+export function encodeMcpToolDefinition(tool) {
+  const name = tool.function?.name || tool.name || "";
+  const desc = tool.function?.description || tool.description || "";
+  const schema = tool.function?.parameters || tool.inputSchema || tool.input_schema || {};
+
+  return concatArrays(
+    encodeField(1, WIRE_TYPE.LEN, name),
+    encodeField(2, WIRE_TYPE.LEN, desc),
+    encodeField(3, WIRE_TYPE.LEN, encodeAgentValue(schema)),
+    encodeField(4, WIRE_TYPE.LEN, "9router"),
+    encodeField(5, WIRE_TYPE.LEN, name)
+  );
+}
+
+export function encodeMcpTools(tools) {
+  if (!tools || !tools.length) return new Uint8Array(0);
+  return concatArrays(...tools.map(t => encodeField(1, WIRE_TYPE.LEN, encodeMcpToolDefinition(t))));
+}
+
+export function decodeMcpArgs(bytes) {
+  const msg = decodeMessage(bytes instanceof Uint8Array || Buffer.isBuffer(bytes) ? bytes : new Uint8Array(0));
+  const name = msg.has(1) ? textDecoder.decode(msg.get(1)[0].value) : "";
+  const toolCallId = msg.has(3) ? textDecoder.decode(msg.get(3)[0].value) : "";
+  const toolName = msg.has(5) ? textDecoder.decode(msg.get(5)[0].value) : name;
+  const args = {};
+
+  if (msg.has(2)) {
+    for (const entryItem of msg.get(2)) {
+      const entryMsg = decodeMessage(entryItem.value);
+      const k = entryMsg.has(1) ? textDecoder.decode(entryMsg.get(1)[0].value) : "";
+      const v = entryMsg.has(2) ? decodeAgentValue(entryMsg.get(2)[0].value) : null;
+      if (k) args[k] = v;
+    }
+  }
+
+  return { name, toolName, toolCallId, args };
+}
+
+export function encodeMcpResultSuccess({ textItems = [], imageItems = [], isError = false } = {}) {
+  const contentItems = [];
+  for (const text of textItems) {
+    const textContent = encodeField(1, WIRE_TYPE.LEN, text);
+    const item = encodeField(1, WIRE_TYPE.LEN, textContent);
+    contentItems.push(encodeField(1, WIRE_TYPE.LEN, item));
+  }
+  for (const img of imageItems) {
+    const imgContent = concatArrays(
+      encodeField(1, WIRE_TYPE.LEN, img.data),
+      encodeField(2, WIRE_TYPE.LEN, img.mimeType || "image/png")
+    );
+    const item = encodeField(2, WIRE_TYPE.LEN, imgContent);
+    contentItems.push(encodeField(1, WIRE_TYPE.LEN, item));
+  }
+
+  const successPayload = concatArrays(
+    ...contentItems,
+    encodeField(2, WIRE_TYPE.VARINT, isError ? 1 : 0)
+  );
+  return encodeField(1, WIRE_TYPE.LEN, successPayload);
+}
+
+export function encodeMcpResultError(error) {
+  const errPayload = encodeField(1, WIRE_TYPE.LEN, error || "Error");
+  return encodeField(2, WIRE_TYPE.LEN, errPayload);
+}
+
+export function encodeMcpResultToolNotFound(toolName) {
+  const notFoundPayload = encodeField(1, WIRE_TYPE.LEN, toolName || "");
+  return encodeField(5, WIRE_TYPE.LEN, notFoundPayload);
 }
 
 // ==================== MESSAGE ENCODING ====================
