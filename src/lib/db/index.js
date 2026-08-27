@@ -1,6 +1,8 @@
 // Public API barrel — all DB functions
-import { getAdapter } from "./driver.js";
+import { getAdapter, closeDb } from "./driver.js";
 import { stringifyJson, parseJson } from "./helpers/jsonCol.js";
+
+export { closeDb };
 
 // Settings
 export {
