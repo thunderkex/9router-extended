@@ -436,20 +436,32 @@ export class KiroExecutor extends BaseExecutor {
       ? appendRepairInstruction(args.body, repairKind === "invalid_tool" ? "tool" : repairKind)
       : structuredClone(args.body || {});
 
-    const retry = await BaseExecutor.prototype.execute.call(this, {
-      ...args,
-      body: repairBody,
-      signal: options.signal
-    });
+    let retry;
+    try {
+      retry = await BaseExecutor.prototype.execute.call(this, {
+        ...args,
+        body: repairBody,
+        signal: options.signal
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      if (error?.status || error?.response) {
+        retry = { response: error.response || error };
+      }
+    }
     if (!retry?.response?.ok) {
       let body = "";
       try {
-        body = await readResponsePrefix(
-          retry?.response,
-          options.signal,
-          Math.min(options.maxBytes, 4096),
-          options.stallTimeoutMs
-        );
+        if (retry?.response?.text) {
+          body = await readResponsePrefix(
+            retry.response,
+            options.signal,
+            Math.min(options.maxBytes, 4096),
+            options.stallTimeoutMs
+          );
+        } else if (typeof retry?.response?.body === "string") {
+          body = retry.response.body;
+        }
       } catch (error) {
         if (error.name === "AbortError") throw error;
       }
