@@ -24,6 +24,7 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { getSkillManifests } from "@/lib/skillsRegistry.js";
+import { classifyPrompt, loadSkillPrompt, formatSkillInjection, ECC_ROUTER_BYPASS_HEADER } from "@/skills/autoRouter.js";
 import { record as healthRecord } from "@/lib/routing/health.js";
 import { incrementFailover } from "@/lib/session/cache.js";
 
@@ -270,7 +271,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     const manifests = await getSkillManifests();
     const activeGenericPrompts = [];
     for (const skill of manifests) {
-      if (skill.hook === "system-prompt" && skill.id !== "caveman" && skill.id !== "ponytail") {
+      if (skill.hook === "system-prompt" && skill.id !== "caveman" && skill.id !== "ponytail" && skill.id !== "ecc-auto-skill-router") {
         const enabledKey = skill.legacy_enabled_key || `${skill.id}Enabled`;
         const isEnabled = chatSettings[enabledKey] !== undefined ? !!chatSettings[enabledKey] : !!skill.default_enabled;
         if (isEnabled && skill.prompt_template) {
@@ -292,6 +293,45 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
           }
           activeGenericPrompts.push({ id: skill.id, prompt });
         }
+      }
+    }
+
+    // ECC Auto Skill Router: dynamically match query and inject prompt
+    const eccBypass = clientRawRequest?.headers?.[ECC_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off" || clientRawRequest?.headers?.["x-9router-skill-router"]?.toLowerCase() === "off";
+    const eccRouterEnabled = !eccBypass && (
+      chatSettings.ecc_auto_skill_routerEnabled !== undefined
+        ? !!chatSettings.ecc_auto_skill_routerEnabled
+        : !!chatSettings["ecc-auto-skill-routerEnabled"]
+    );
+
+    if (eccRouterEnabled) {
+      try {
+        const threshold = chatSettings.ecc_auto_skill_routerConfidence !== undefined
+          ? Number(chatSettings.ecc_auto_skill_routerConfidence)
+          : chatSettings.confidence_threshold !== undefined
+            ? Number(chatSettings.confidence_threshold)
+            : 0.35;
+        const maxSkills = chatSettings.ecc_auto_skill_routerMaxSkills !== undefined
+          ? Number(chatSettings.ecc_auto_skill_routerMaxSkills)
+          : chatSettings.max_skills !== undefined
+            ? Number(chatSettings.max_skills)
+            : 1;
+        const matches = await classifyPrompt(body, { threshold, maxSkills });
+
+        if (matches && matches.length > 0) {
+          for (const match of matches) {
+            const promptContent = await loadSkillPrompt(match.folder);
+            if (promptContent && promptContent.trim()) {
+              const formattedPrompt = formatSkillInjection(match, promptContent);
+              activeGenericPrompts.push({ id: `ecc-${match.name}`, prompt: formattedPrompt });
+              if (process.env.ENABLE_REQUEST_LOGS === "true") {
+                log.info("ECC-ROUTER", `[ecc-auto-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        log.warn("ECC-ROUTER", `Classification failed (fail-open): ${err.message}`);
       }
     }
 
