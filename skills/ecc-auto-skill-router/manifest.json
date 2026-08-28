@@ -1,0 +1,28 @@
+{
+  "id": "ecc-auto-skill-router",
+  "name": "ECC Auto Skill Router",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "description": "Auto-inspects incoming chat requests, matches against ECC skill catalog (280+ skills), and injects relevant skill instructions into system prompt.",
+  "default_enabled": false,
+  "config_schema": [
+    {
+      "key": "confidence_threshold",
+      "label": "Confidence Threshold",
+      "type": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.35
+    },
+    {
+      "key": "max_skills",
+      "label": "Max Injected Skills",
+      "type": "slider",
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "default": 1
+    }
+  ]
+}
