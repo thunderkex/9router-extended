@@ -150,6 +150,9 @@ export default function ExtendedClient() {
   const [installingSkill, setInstallingSkill] = useState(null);
   const [deletingSkill, setDeletingSkill] = useState(null);
   const [skillToDelete, setSkillToDelete] = useState(null);
+  const [syncingEcc, setSyncingEcc] = useState(false);
+  const [eccSyncResult, setEccSyncResult] = useState(null);
+  const [eccCatalogStats, setEccCatalogStats] = useState({ skillsCount: 286 });
 
   // Studio Modal State
   const [showStudioModal, setShowStudioModal] = useState(false);
@@ -171,9 +174,10 @@ export default function ExtendedClient() {
 
   const loadData = useCallback(async () => {
     try {
-      const [settingsRes, skillsRes] = await Promise.all([
+      const [settingsRes, skillsRes, eccRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/skills"),
+        fetch("/api/skills/sync-ecc").catch(() => null),
       ]);
       if (settingsRes.ok) {
         const s = await settingsRes.json();
@@ -183,12 +187,37 @@ export default function ExtendedClient() {
         const sk = await skillsRes.json();
         setSkills(sk);
       }
+      if (eccRes && eccRes.ok) {
+        const eccData = await eccRes.json();
+        if (eccData.skillsCount !== undefined) {
+          setEccCatalogStats({ skillsCount: eccData.skillsCount });
+        }
+      }
     } catch (e) {
       console.error("Failed to load extended settings:", e);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleSyncEccSkills = async () => {
+    setSyncingEcc(true);
+    setEccSyncResult(null);
+    try {
+      const res = await fetch("/api/skills/sync-ecc", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEccCatalogStats({ skillsCount: data.skillsCount });
+        setEccSyncResult({ success: true, message: `Synced ${data.skillsCount} skills successfully.` });
+      } else {
+        setEccSyncResult({ success: false, message: data.error || "Failed to sync" });
+      }
+    } catch (err) {
+      setEccSyncResult({ success: false, message: err.message });
+    } finally {
+      setSyncingEcc(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -398,6 +427,90 @@ export default function ExtendedClient() {
         </div>
       </div>
 
+      {/* ECC Auto Skill Router Card */}
+      <Card className="p-6 space-y-5 border-primary/20 bg-surface">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-4">
+          <div className="space-y-1 flex-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="material-symbols-outlined text-primary text-[22px]">hub</span>
+              <h2 className="text-base font-semibold text-text-main">ECC Auto Skill Router</h2>
+              <Badge variant="success" size="sm">286 Skills Catalog</Badge>
+            </div>
+            <p className="text-xs text-text-muted leading-relaxed">
+              Auto-classify and inject domain knowledge from 286 ECC skills into requests based on user prompt matching. Zero config, sub-5ms local routing.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncEccSkills}
+              disabled={syncingEcc}
+              className="flex items-center gap-1.5 text-xs"
+            >
+              <span className={`material-symbols-outlined text-[16px] ${syncingEcc ? "animate-spin" : ""}`}>
+                sync
+              </span>
+              <span>{syncingEcc ? "Syncing..." : "Sync Catalog"}</span>
+            </Button>
+            <Toggle
+              checked={!!settings.ecc_auto_skill_routerEnabled}
+              onChange={() => {
+                const nextVal = !settings.ecc_auto_skill_routerEnabled;
+                setSettings((prev) => ({ ...prev, ecc_auto_skill_routerEnabled: nextVal }));
+                patchSetting({ ecc_auto_skill_routerEnabled: nextVal });
+              }}
+            />
+          </div>
+        </div>
+
+        {eccSyncResult && (
+          <div
+            className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+              eccSyncResult.success
+                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                : "bg-danger/10 text-danger border border-danger/20"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {eccSyncResult.success ? "check_circle" : "error"}
+            </span>
+            <span>{eccSyncResult.message}</span>
+          </div>
+        )}
+
+        {/* Sliders when enabled */}
+        {settings.ecc_auto_skill_routerEnabled && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <ConfigSlider
+              label="Confidence Threshold"
+              configKey="ecc_auto_skill_routerConfidence"
+              value={settings.ecc_auto_skill_routerConfidence !== undefined ? Number(settings.ecc_auto_skill_routerConfidence) : 0.35}
+              min={0.1}
+              max={0.9}
+              step={0.05}
+              onChange={(val) => {
+                setSettings((prev) => ({ ...prev, ecc_auto_skill_routerConfidence: val }));
+                patchSetting({ ecc_auto_skill_routerConfidence: val });
+              }}
+            />
+            <ConfigSlider
+              label="Max Skills per Request"
+              configKey="ecc_auto_skill_routerMaxSkills"
+              value={settings.ecc_auto_skill_routerMaxSkills !== undefined ? Number(settings.ecc_auto_skill_routerMaxSkills) : 1}
+              min={1}
+              max={3}
+              step={1}
+              onChange={(val) => {
+                setSettings((prev) => ({ ...prev, ecc_auto_skill_routerMaxSkills: val }));
+                patchSetting({ ecc_auto_skill_routerMaxSkills: val });
+              }}
+            />
+          </div>
+        )}
+      </Card>
+
       {/* Section 1: Custom & Aesthetic Rules */}
       <Card className="p-6 space-y-5">
         <div className="flex items-center justify-between border-b border-border pb-3">
@@ -473,6 +586,7 @@ export default function ExtendedClient() {
                               value={val}
                               min={cfg.min ?? 1}
                               max={cfg.max ?? 10}
+                              step={cfg.step ?? 1}
                               onChange={(newVal) =>
                                 handleSkillConfig(skill, cfg.legacy_key || cfg.key, newVal)
                               }
