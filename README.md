@@ -736,7 +736,8 @@ Client → 9Router → Headroom /v1/compress → 9Router → provider
 #### ⚡ 1-Click Auto Install (Zero-Config)
 In **Dashboard → Token Saver → Headroom**:
 - **⚡ 1-Click Auto Setup:** Automatically discovers your local Python ($\ge 3.10$) environment, executes `pip install "headroom-ai[proxy]"`, launches the daemon, and enables compression in one click.
-- **🔄 Smart Port Conflict Avoidance:** If port `8787` is occupied by another app, 9Router automatically probes and binds to the next available port (`8788`, `8789`...) with zero manual config.
+- **� Auto-Start on Boot:** Automatically re-spawns the Headroom proxy process on 9Router startup / restart when enabled.
+- **�🔄 Smart Port Conflict Avoidance:** If port `8787` is occupied by another app, 9Router automatically probes and binds to the next available port (`8788`, `8789`...) with zero manual config.
 - **📡 Auto-Detect Port Radar:** Click "Auto-Detect Port" in the Headroom modal to scan active instances running on ports 8787–8791 and instantly sync your proxy URL.
 
 #### 🛠️ Manual Local / Docker Setup (Optional)
@@ -898,8 +899,9 @@ Seamless translation between formats:
 | Category | Location in Dashboard | Included Modules | Functionality |
 | :--- | :--- | :--- | :--- |
 | ⚡ **Token Saver** | `Dashboard → Token Saver` | **RTK**, **Headroom**, **Caveman Mode**, **Ponytail**, **Watermarks Remover**, **PXPIPE** | Native, pre-configured input/output token compression & hygiene. |
-| ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, & **Custom User Skills** | Pluggable community rules, aesthetic guidelines, dynamic sliders, and agent tools. |
+| ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Hermes Agent Toolkit**, **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, & **Custom User Skills** | Pluggable community rules, persistent agent memory sync, aesthetic guidelines, dynamic sliders, and agent tools. |
 | 🔀 **ECC Auto Skill Router** | `Dashboard → 9Router Extended` | **TF-IDF Skill Classifier**, **Auto Dynamic Prompt Routing** | Local TF-IDF classifier routing user intent to matched skills with score thresholding and trace observability. |
+| 🧠 **Hermes Memory Bridge** | `Dashboard → 9Router Extended` | **Hermes Agent Persistent Store Sync** | Reads/writes `MEMORY.md` and `USER.md` (`\n§\n` delimited), auto-injects persistent notes into chat completions, and async auto-saves user preferences across sessions. |
 
 ---
 
@@ -979,6 +981,12 @@ You can create new skills directly from **Dashboard → 9Router Extended → Cre
 - **Dynamic Skill Injection:** Injects matched skill instructions at request time based on relevance threshold and max-skills limit.
 - **Trace Observability:** Injects headers/metadata (`x-9r-ecc-skills`, `x-9r-ecc-scores`) and logs triggered rules for full inspection in request traces.
 - **1-Click Sync:** Sync bundled and imported ECC skills straight from the extended dashboard.
+
+##### 🧠 Hermes Agent Memory Bridge & Bidirectional Sync
+- **Persistent Memory Storage:** Connects directly with Hermes Agent memory directory (`%LOCALAPPDATA%\hermes\memories\` or `~/.hermes/memories/`), managing `MEMORY.md` (agent notes, ~2200 char budget) and `USER.md` (user profile/preferences, ~1375 char budget).
+- **Format Integrity:** Preserves Hermes section delimiter (`\n§\n`) and applies sliding-window eviction with deduplication when char limits are exceeded.
+- **Dynamic Context Injection:** Automatically injects user preferences and agent notes into the system prompt across OpenAI, Claude, and Gemini formats via `open-sse/rtk/systemInject.js`.
+- **Async Background Learning:** Detects explicit preferences, instructions, and rules in chat completions and saves them automatically to Hermes disk memory in the background without adding request latency.
 
 ##### 🎯 Auto-Suggest Best Combo (Multi-Objective Probing)
 - **Automatic Health & Latency Probing:** Real-time probing across active connections to evaluate model availability and response latency.
