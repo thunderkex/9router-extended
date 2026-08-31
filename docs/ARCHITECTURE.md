@@ -56,7 +56,7 @@ flowchart LR
         API[V1 Compatibility API\n/v1/*]
         DASH[Dashboard + Management API\n/api/*]
         CORE[SSE + Translation Core\nopen-sse + src/sse]
-        DB[(db.json)]
+        DB[(SQLite / data.sqlite)]
         UDB[(usage.json + log.txt)]
     end
 
@@ -137,9 +137,10 @@ Main flow modules:
 
 Primary state DB:
 
-- `src/lib/localDb.js`
-- file: `${DATA_DIR}/db.json` (or `~/.9router/db.json` when `DATA_DIR` is unset)
-- entities: providerConnections, providerNodes, modelAliases, combos, apiKeys, settings, pricing
+- `src/lib/db/index.js` (with backward-compatible alias `src/lib/localDb.js`)
+- adapter chain: `bun:sqlite` → `better-sqlite3` → `node:sqlite` → `sql.js`
+- file: `${DATA_DIR}/db/data.sqlite` (or `~/.9router/db/data.sqlite` when `DATA_DIR` is unset)
+- entities (under `src/lib/db/repos/*`): providerConnections, providerNodes, modelAliases, combos, apiKeys, settings, pricing, customModels, disabledModels, skills
 
 Usage DB:
 
@@ -377,7 +378,7 @@ erDiagram
 
 Physical storage files:
 
-- main state: `${DATA_DIR}/db.json` (or `~/.9router/db.json`)
+- main state: `${DATA_DIR}/db/data.sqlite` (or `~/.9router/db/data.sqlite`)
 - usage stats: `~/.9router/usage.json`
 - request log lines: `~/.9router/log.txt`
 - optional translator/request debug sessions: `<repo>/logs/...`
@@ -394,7 +395,7 @@ flowchart LR
     subgraph ContainerOrProcess[9Router Runtime]
         Next[Next.js Server\nPORT=20128]
         Core[SSE Core + Executors]
-        MainDB[(db.json)]
+        MainDB[(data.sqlite)]
         UsageDB[(usage.json/log.txt)]
     end
 

@@ -1,9 +1,9 @@
 <div align="center">
   <img src="../images/9router.png?1" alt="9Router Dashboard" width="800"/>
 
-  # 9Router - Router AI Gratis
+  # 9Router Extended - Router AI Gratis & Token Saver
 
-  **Jangan berhenti ngoding. Otomatis dialihkan ke model AI gratis & murah dengan smart fallback.**
+  **Jangan berhenti ngoding. Hemat 20-40% token dengan RTK + otomatis fallback ke model AI gratis & murah.**
 
   **Hubungkan semua tool AI coding (Claude Code, Cursor, Antigravity, Copilot, Codex, Gemini, OpenCode, Cline, OpenClaw...) ke 40+ provider AI dan 100+ model.**
 
@@ -24,15 +24,19 @@
 
 - ❌ Kuota langganan hangus tiap bulan tanpa terpakai
 - ❌ Rate limit bikin ngoding berhenti di tengah jalan
+- ❌ Tool output (`git diff`, `grep`, `ls`...) memboroskan token
 - ❌ API mahal ($20–50/bulan per provider)
 - ❌ Harus gonta-ganti provider secara manual
 
 **9Router menyelesaikan itu semua:**
 
-- ✅ **Maksimalkan langganan** - lacak kuota dan habiskan sebelum reset
-- ✅ **Fallback otomatis** - langganan → murah → gratis, tanpa downtime
-- ✅ **Multi-akun** - round-robin antar akun untuk tiap provider
-- ✅ **Universal** - mendukung Claude Code, Codex, Gemini CLI, Cursor, Cline, dan tool CLI apa pun
+- ✅ **RTK Token Saver** - Kompresi otomatis output tool, hemat 20-40% token tiap request
+- ✅ **ECC Auto Skill Router** - Klasifikasi prompt lokal TF-IDF & injeksi skill dinamis
+- ✅ **Auto-Suggest Best Combo** - Probing performa & latency model untuk kombo fallback terbaik
+- ✅ **Maksimalkan langganan** - Lacak kuota dan habiskan sebelum reset
+- ✅ **Fallback otomatis** - Langganan → murah → gratis, tanpa downtime
+- ✅ **Multi-akun** - Round-robin antar akun untuk tiap provider
+- ✅ **Universal** - Mendukung Claude Code, Codex, Cursor, Cline, dan tool CLI apa pun
 
 ---
 

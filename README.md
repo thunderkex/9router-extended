@@ -165,7 +165,7 @@ pm2 restart 9router --update-env && pm2 save
 ```bash
 # Verify extended version is installed
 9router --version
-# Output: 0.5.56-extended (or latest version)
+# Output: 0.5.59-extended (or latest version)
 
 # Interactive start (Terminal UI & Web Dashboard)
 9router
@@ -899,6 +899,7 @@ Seamless translation between formats:
 | :--- | :--- | :--- | :--- |
 | ⚡ **Token Saver** | `Dashboard → Token Saver` | **RTK**, **Headroom**, **Caveman Mode**, **Ponytail**, **Watermarks Remover**, **PXPIPE** | Native, pre-configured input/output token compression & hygiene. |
 | ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, & **Custom User Skills** | Pluggable community rules, aesthetic guidelines, dynamic sliders, and agent tools. |
+| 🔀 **ECC Auto Skill Router** | `Dashboard → 9Router Extended` | **TF-IDF Skill Classifier**, **Auto Dynamic Prompt Routing** | Local TF-IDF classifier routing user intent to matched skills with score thresholding and trace observability. |
 
 ---
 
@@ -968,6 +969,22 @@ You can create new skills directly from **Dashboard → 9Router Extended → Cre
 - **Agent CLI Tool (`install-cli`):** Integrates external CLI tools (e.g. MCP packages) with 1-click Install/Uninstall management.
 - **1-Click Starter Templates:** Pre-configured templates for UI Design Taste, Security & Privacy Guard, and MCP Tools.
 - **Live Manifest Inspector:** Preview the generated `manifest.json` before saving.
+
+---
+
+#### 4. ECC Auto Skill Router & Auto-Suggest Best Combo
+
+##### 🔀 ECC Auto Skill Router (Local TF-IDF Classifier)
+- **Local TF-IDF Intent Matching:** Fast in-memory classification matches user prompt intent to community and imported ECC skills without external network calls.
+- **Dynamic Skill Injection:** Injects matched skill instructions at request time based on relevance threshold and max-skills limit.
+- **Trace Observability:** Injects headers/metadata (`x-9r-ecc-skills`, `x-9r-ecc-scores`) and logs triggered rules for full inspection in request traces.
+- **1-Click Sync:** Sync bundled and imported ECC skills straight from the extended dashboard.
+
+##### 🎯 Auto-Suggest Best Combo (Multi-Objective Probing)
+- **Automatic Health & Latency Probing:** Real-time probing across active connections to evaluate model availability and response latency.
+- **Kind-Aware Filtering:** Probing automatically isolates chat/LLM endpoints (`kind: "llm"`), skipping embeddings, audio, and image models during chat combo generation.
+- **Cross-Connection Deduplication:** Merges model variants across duplicate accounts, prioritizing active and lowest-latency endpoints.
+- **Smart Fallback Tiers:** Generates balanced multi-tier combos (e.g. `Tier 1: Subscription / High-Quality` → `Tier 2: Fast & Cheap` → `Tier 3: Free / High-Quota Fallback`).
 
 ---
 
