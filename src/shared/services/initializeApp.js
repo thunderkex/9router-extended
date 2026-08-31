@@ -47,6 +47,8 @@ const g = global.__appSingleton ??= {
   mitmStartInProgress: false,
   tunnelAutoResumed: false,
   tailscaleAutoResumed: false,
+  headroomAutoResumed: false,
+  hermesAutoResumed: false,
 };
 
 export async function initializeApp() {
@@ -118,6 +120,70 @@ async function runHeavyStartup() {
   import("@/sse/services/backgroundTokenRefresh.js")
     .then(({ startBackgroundTokenRefresh }) => startBackgroundTokenRefresh())
     .catch((e) => console.log("[BackgroundTokenRefresh] scheduler start failed:", e.message));
+
+  // Auto-start Headroom proxy if enabled and binary installed
+  if (settings.headroomEnabled && settings.headroomAutoStart !== false && !g.headroomAutoResumed) {
+    g.headroomAutoResumed = true;
+    autoStartHeadroom(settings).catch((e) => console.log("[InitApp] Headroom auto-start failed:", e.message));
+  }
+
+  // Auto-start Hermes Agent service if enabled and CLI installed
+  if (settings.hermesServiceAutoStart !== false && !g.hermesAutoResumed) {
+    g.hermesAutoResumed = true;
+    autoStartHermes(settings).catch((e) => console.log("[InitApp] Hermes auto-start failed:", e.message));
+  }
+}
+
+async function autoStartHeadroom(settings) {
+  try {
+    const { findHeadroomBinary, isLoopbackHeadroomUrl, DEFAULT_HEADROOM_URL } = await import("@/lib/headroom/detect.js");
+    const { getManagedPid, startHeadroomProxy } = await import("@/lib/headroom/process.js");
+
+    const binary = findHeadroomBinary();
+    if (!binary) return;
+
+    const url = settings.headroomUrl || DEFAULT_HEADROOM_URL;
+    if (!isLoopbackHeadroomUrl(url)) return;
+
+    const existing = getManagedPid();
+    if (existing) return;
+
+    let port = 8787;
+    try {
+      const u = new URL(url);
+      const p = parseInt(u.port, 10);
+      if (p > 0 && p < 65536) port = p;
+    } catch { /* ignore */ }
+
+    console.log("[InitApp] Headroom proxy is enabled, auto-starting...");
+    const res = await startHeadroomProxy({
+      port,
+      codeAware: settings.headroomCodeAware === true,
+      kompress: settings.headroomKompress !== false,
+    });
+    console.log(`[InitApp] Headroom proxy auto-started (PID ${res.pid}, port ${res.port})`);
+  } catch (err) {
+    console.log("[InitApp] Headroom auto-start error:", err.message);
+  }
+}
+
+async function autoStartHermes(settings) {
+  try {
+    const { findHermesBinary } = await import("@/lib/plugins/hermes/detect.js");
+    const { getManagedPid, startHermesService } = await import("@/lib/plugins/hermes/process.js");
+
+    const binary = findHermesBinary();
+    if (!binary) return;
+
+    const existing = getManagedPid();
+    if (existing) return;
+
+    console.log("[InitApp] Hermes Agent CLI detected, auto-starting gateway service...");
+    const res = await startHermesService({ args: ["gateway"] });
+    console.log(`[InitApp] Hermes Agent service auto-started (PID ${res.pid})`);
+  } catch (err) {
+    console.log("[InitApp] Hermes auto-start error:", err.message);
+  }
 }
 
 function hasQuotaAutoPingEnabled(settings) {
