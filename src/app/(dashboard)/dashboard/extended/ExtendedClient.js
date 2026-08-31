@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, Button, Toggle, Badge, Modal, Input, ConfigSlider, ConfirmModal } from "@/shared/components";
+import HermesPluginCard from "./components/HermesPluginCard";
 
 const DEFAULT_PRE_ROUTE_SCRIPT = `/**
  * Pre-Route Hook
@@ -517,6 +518,9 @@ export default function ExtendedClient() {
           </div>
         )}
       </Card>
+
+      {/* Hermes Agent Managed Service Card */}
+      <HermesPluginCard />
 
       {/* Section 1: Custom & Aesthetic Rules */}
       <Card className="p-6 space-y-5">

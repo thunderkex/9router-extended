@@ -1,0 +1,26 @@
+{
+  "id": "hermes-toolkit",
+  "name": "Hermes Agent Memory & Toolkit",
+  "description": "Auto-injects Hermes persistent memories into chat and auto-syncs learned facts back to Hermes Agent.",
+  "category": "prompt-injection",
+  "hook": "system-prompt",
+  "default_enabled": true,
+  "source": "custom",
+  "config_schema": [
+    {
+      "key": "auto_save_memory",
+      "label": "Auto-Save Learned Context",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "char_limit",
+      "label": "Memory Character Limit",
+      "type": "slider",
+      "min": 500,
+      "max": 5000,
+      "step": 100,
+      "default": 2200
+    }
+  ]
+}

@@ -65,6 +65,7 @@ const PROTECTED_API_PATHS = [
   "/api/mcp",
   "/api/translator",
   "/api/tunnel",
+  "/api/plugins",
 ];
 
 // Routes that spawn child processes or read host secrets — restrict to localhost.
@@ -84,6 +85,11 @@ const LOCAL_ONLY_PATHS = [
   "/api/headroom/start",
   "/api/headroom/stop",
   "/api/headroom/proxy",
+  "/api/plugins/hermes/install",
+  "/api/plugins/hermes/start",
+  "/api/plugins/hermes/stop",
+  "/api/plugins/hermes/restart",
+  "/api/plugins/hermes/telegram",
 ];
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
