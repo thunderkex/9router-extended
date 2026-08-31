@@ -386,12 +386,19 @@ export default function ExtendedClient() {
     }
   };
 
-  // Exclude default core token savers which belong to Token Saver
-  const defaultTokenSaverIds = ["rtk", "headroom", "caveman", "ponytail", "watermarks-remover"];
+  // Exclude default core token savers & dedicated cards (ECC Auto Skill Router)
+  const excludedPromptSkillIds = [
+    "rtk",
+    "headroom",
+    "caveman",
+    "ponytail",
+    "watermarks-remover",
+    "ecc-auto-skill-router",
+  ];
   
   const customPromptSkills = skills.filter(
     (s) =>
-      !defaultTokenSaverIds.includes(s.id) &&
+      !excludedPromptSkillIds.includes(s.id) &&
       (s.hook === "system-prompt" || s.category === "prompt-injection")
   );
 
