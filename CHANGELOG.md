@@ -15,6 +15,19 @@
 - **ECC Skill Card**: Deduplicate ECC skill cards in dashboard and ignore build artifacts.
 - **Continuity Handling**: Provider-level continuity stripping in core chat handler.
 
+### Core 9Router Updates
+- **Usage Rankings**: Added `/dashboard/rankings` with Models, API Keys, and Requests by IP tabs; switch between Tokens, Requests, and Cost, expand rows for per-model breakdowns, and select rows for deletion.
+- **Per-IP Usage Attribution**: Persist resolved client IPs in usage history and daily `byIp` rollups; older records appear as `unknown`.
+- **Trusted Proxy & CDN Support**: Added `TRUST_PROXY` for reverse-proxy and Docker deployments, with `CF-Connecting-IP` and `True-Client-IP` precedence before `X-Forwarded-For` and `X-Real-IP`. Keep the app port inaccessible to untrusted clients when enabled.
+- **Usage & Request Logs**: Added log clearing with confirmation, usage-stat deletion APIs, and direct request-detail lookup by ID.
+- **Proxy Pools**: Export pools as URL lists, `host:port:user:pass`, or CSV.
+- **Grok CLI**: Bulk-import accounts and reduce redundant settings reads during provider selection.
+- **API Keys**: Track per-key usage, reset usage counters, persist model/token restrictions, resolve model aliases during access checks, and reject invalid supplied keys consistently.
+- **Combos**: Exclude disabled model entries while supporting both string and object model definitions.
+- **Qoder**: Detect billing blocks after leading empty frames or SSE comments and decode nested stringified errors so fallback triggers before error text reaches chat.
+- **Performance & Build**: Fetch remote images concurrently, switch Docker builds to Bun, include `undici` in the runtime image, and cancel stale provider-limit requests.
+- **Dashboard**: Refreshed shared components, responsive navigation, endpoint controls, segmented controls, and login/loading states.
+
 ---
 
 # v0.5.57-extended (2026-08-27)
