@@ -266,7 +266,7 @@ export default function RequestDetailsTab() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
+                  <td colSpan="9" className="p-8 text-center text-text-muted">
                     <div className="flex items-center justify-center gap-2">
                       <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                       Loading...
@@ -275,7 +275,7 @@ export default function RequestDetailsTab() {
                 </tr>
               ) : details.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
+                  <td colSpan="9" className="p-8 text-center text-text-muted">
                     No request details found
                   </td>
                 </tr>
@@ -288,8 +288,17 @@ export default function RequestDetailsTab() {
                     <td className="whitespace-nowrap p-4 text-sm text-text-main">
                       {new Date(detail.timestamp).toLocaleString()}
                     </td>
-                    <td className="max-w-[260px] truncate p-4 font-mono text-sm text-text-main">
-                      {detail.model}
+                    <td className="max-w-[260px] p-4 text-sm text-text-main">
+                      <div className="truncate font-mono">{detail.model}</div>
+                      {detail.eccSkills && detail.eccSkills.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {detail.eccSkills.map((s, si) => (
+                            <span key={si} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20 font-mono">
+                              ⚡ {s.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="max-w-[180px] truncate p-4 text-sm text-text-main">
                        <span className="font-medium">
@@ -412,6 +421,30 @@ export default function RequestDetailsTab() {
                 </span>
               </div>
             </div>
+
+            {selectedDetail.eccSkills && selectedDetail.eccSkills.length > 0 && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-[18px] text-primary">bolt</span>
+                  <span className="font-semibold text-sm text-text-main">ECC Skill Router</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                    {selectedDetail.eccSkills.length} {selectedDetail.eccSkills.length === 1 ? "Skill Match" : "Skills Matched"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {selectedDetail.eccSkills.map((skill, si) => (
+                    <div key={si} className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-background border border-primary/20 text-xs font-mono">
+                      <span className="font-semibold text-primary">{skill.name}</span>
+                      {typeof skill.confidence === "number" && (
+                        <span className="text-[10px] text-text-muted bg-primary/10 px-1 py-0.2 rounded">
+                          {Math.round(skill.confidence * 100)}%
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {selectedDetail.pxpipe && (
               <div className="rounded-lg border border-black/5 dark:border-white/5 p-4">

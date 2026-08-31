@@ -205,10 +205,10 @@ pm2 start ecosystem.config.cjs
 pm2 save
 
 # 4. Configure auto-start on boot:
-# ── On Windows:
-npm install -g pm2-windows-startup
-pm2-startup install
-pm2 save
+# ── On Windows (Automated PowerShell script):
+npm run pm2:setup:windows
+# Or manually:
+# npm install -g pm2-windows-startup && pm2-startup install && pm2 save
 
 # ── On Linux / macOS:
 pm2 startup

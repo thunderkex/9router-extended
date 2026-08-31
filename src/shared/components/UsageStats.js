@@ -68,7 +68,25 @@ function RecentRequests({ requests = [] }) {
                     <td className="py-1.5">
                       <span className={`block w-1.5 h-1.5 rounded-full ${ok ? "bg-success" : "bg-error"}`} />
                     </td>
-                    <td className="py-1.5 font-mono truncate max-w-[120px]" title={r.model}>{r.model}</td>
+                    <td className="py-1.5 font-mono max-w-[140px]" title={r.model}>
+                      <div className="truncate">{r.model}</div>
+                      {r.eccSkills && r.eccSkills.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {r.eccSkills.map((s, si) => {
+                            const name = typeof s === "string" ? s : s.name;
+                            return (
+                              <span
+                                key={si}
+                                className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-sans font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                                title={`ECC Skill: ${name}${s.confidence ? ` (${Math.round(s.confidence * 100)}%)` : ""}`}
+                              >
+                                ⚡ {name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
                     <td className="py-1.5 text-right whitespace-nowrap">
                       <span className="text-primary">{fmt(r.promptTokens)}↑</span>
                       {" "}

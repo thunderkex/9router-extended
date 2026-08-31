@@ -317,6 +317,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
             ? Number(chatSettings.max_skills)
             : 1;
         const matches = await classifyPrompt(body, { threshold, maxSkills });
+        const matchedSkills = [];
 
         if (matches && matches.length > 0) {
           for (const match of matches) {
@@ -324,6 +325,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
             if (promptContent && promptContent.trim()) {
               const formattedPrompt = formatSkillInjection(match, promptContent);
               activeGenericPrompts.push({ id: `ecc-${match.name}`, prompt: formattedPrompt });
+              matchedSkills.push({ name: match.name, score: match.score, folder: match.folder });
               if (process.env.ENABLE_REQUEST_LOGS === "true") {
                 log.info("ECC-ROUTER", `[ecc-auto-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
               }
@@ -335,6 +337,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     }
 
+    const matchedSkills = activeGenericPrompts
+      .filter((p) => p.id && p.id.startsWith("ecc-"))
+      .map((p) => ({ name: p.id.replace(/^ecc-/, "") }));
+
     const result = await handleChatCore({
       body: { ...body, model: `${provider}/${model}` },
       modelInfo: { provider, model },
@@ -344,6 +350,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       connectionId: credentials.connectionId,
       userAgent,
       apiKey,
+      eccSkills: matchedSkills.length > 0 ? matchedSkills : undefined,
       ccFilterNaming: !!chatSettings.ccFilterNaming,
       rtkEnabled: !!chatSettings.rtkEnabled,
       headroomEnabled: !!chatSettings.headroomEnabled,

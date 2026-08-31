@@ -117,7 +117,7 @@ function UsageContent() {
           <div className="px-3 py-2 rounded-lg bg-warning/10 border border-warning/30 flex items-center gap-2">
             <span className="material-symbols-outlined text-warning text-base">speed</span>
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase font-semibold text-warning/70 tracking-wider">Avg P50</span>
+              <span className="text-[10px] uppercase font-semibold text-warning/70 tracking-wider">Avg Response Time</span>
               <span className="text-lg font-bold text-warning tabular-nums">{liveStats.avgLatency}ms</span>
             </div>
           </div>
