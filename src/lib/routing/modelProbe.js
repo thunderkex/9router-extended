@@ -49,7 +49,13 @@ export function getCachedProbeResults() {
 export function resolveConnectionModels(connection, { customModels = null, disabledModels = null } = {}) {
   if (!connection || !connection.provider) return [];
   const providerId = connection.provider;
-  const alias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
+  const isCompatible = isOpenAICompatibleProvider(providerId) || isAnthropicCompatibleProvider(providerId);
+  const alias = (
+    connection?.providerSpecificData?.prefix
+    || (isCompatible ? providerId : null)
+    || PROVIDER_ID_TO_ALIAS[providerId]
+    || providerId
+  ).trim();
 
   if (!customModels) {
     try {
@@ -68,17 +74,25 @@ export function resolveConnectionModels(connection, { customModels = null, disab
     }
   }
 
-  const disabledList = Array.isArray(disabledModels[alias]) ? disabledModels[alias] : [];
+  const disabledList = Array.isArray(disabledModels[alias])
+    ? disabledModels[alias]
+    : (Array.isArray(disabledModels[providerId]) ? disabledModels[providerId] : []);
   const isDisabled = (id) => disabledList.includes(id);
 
-  const registryModels = (getProviderModels(alias) || []).filter((m) => !isDisabled(m.id));
+  const registryModels = (getProviderModels(alias) || getProviderModels(providerId) || []).filter((m) => !isDisabled(m.id));
   const providerCustomModels = (customModels || []).filter(
     (m) => (m.providerAlias === alias || m.providerAlias === providerId) && !isDisabled(m.id)
   );
 
-  // 1. Explicit connection.models array
-  if (Array.isArray(connection.models) && connection.models.length > 0) {
-    const enabledIds = connection.models.map((m) =>
+  // 1. Explicit connection.models array or providerSpecificData.enabledModels
+  const rawModelList = (Array.isArray(connection.models) && connection.models.length > 0)
+    ? connection.models
+    : (Array.isArray(connection.providerSpecificData?.enabledModels) && connection.providerSpecificData.enabledModels.length > 0
+      ? connection.providerSpecificData.enabledModels
+      : null);
+
+  if (Array.isArray(rawModelList) && rawModelList.length > 0) {
+    const enabledIds = rawModelList.map((m) =>
       typeof m === "string" ? m : m?.id || m?.name
     ).filter(Boolean);
 
@@ -211,7 +225,7 @@ export async function probeProviderModels(connection, options = {}) {
     baseUrl = `http://127.0.0.1:${process.env.PORT || UPDATER_CONFIG.appPort}`,
     force = false,
     maxConcurrency = 3,
-    timeoutMs = 5000,
+    timeoutMs = 10000,
     customModels = null,
     disabledModels = null,
   } = options;
@@ -296,7 +310,7 @@ export async function probeAllActiveConnections(options = {}) {
     baseUrl = `http://127.0.0.1:${process.env.PORT || UPDATER_CONFIG.appPort}`,
     force = false,
     maxConcurrency = 3,
-    timeoutMs = 5000,
+    timeoutMs = 10000,
   } = options;
 
   const active = connections.filter((c) => c && c.isActive !== false && c.provider);

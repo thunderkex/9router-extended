@@ -57,7 +57,7 @@ export async function GET(request) {
         baseUrl,
         force,
         maxConcurrency: 3,
-        timeoutMs: 5000,
+        timeoutMs: 10000,
       });
       testedModels = probeResult.testedModels || [];
       summary = probeResult.summary || summary;
