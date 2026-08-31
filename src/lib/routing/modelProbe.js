@@ -45,8 +45,9 @@ export function getCachedProbeResults() {
 /**
  * Resolve candidate models for a given provider connection.
  * Returns custom models, registry models, or connection models minus disabled ones.
+ * Filters by service kind (default: "llm") to avoid probing embedding/stt/tts models for chat combos.
  */
-export function resolveConnectionModels(connection, { customModels = null, disabledModels = null } = {}) {
+export function resolveConnectionModels(connection, { customModels = null, disabledModels = null, kindFilter = "llm" } = {}) {
   if (!connection || !connection.provider) return [];
   const providerId = connection.provider;
   const isCompatible = isOpenAICompatibleProvider(providerId) || isAnthropicCompatibleProvider(providerId);
@@ -79,10 +80,16 @@ export function resolveConnectionModels(connection, { customModels = null, disab
     : (Array.isArray(disabledModels[providerId]) ? disabledModels[providerId] : []);
   const isDisabled = (id) => disabledList.includes(id);
 
-  const registryModels = (getProviderModels(alias) || getProviderModels(providerId) || []).filter((m) => !isDisabled(m.id));
-  const providerCustomModels = (customModels || []).filter(
-    (m) => (m.providerAlias === alias || m.providerAlias === providerId) && !isDisabled(m.id)
-  );
+  const isKindMatch = (kind) => {
+    if (!kindFilter) return true;
+    const k = kind || "llm";
+    return k === kindFilter;
+  };
+
+  const registryModels = (getProviderModels(alias) || getProviderModels(providerId) || [])
+    .filter((m) => !isDisabled(m.id) && isKindMatch(m.kind || m.type));
+  const providerCustomModels = (customModels || [])
+    .filter((m) => (m.providerAlias === alias || m.providerAlias === providerId) && !isDisabled(m.id) && isKindMatch(m.type || m.kind));
 
   // 1. Explicit connection.models array or providerSpecificData.enabledModels
   const rawModelList = (Array.isArray(connection.models) && connection.models.length > 0)
@@ -116,11 +123,11 @@ export function resolveConnectionModels(connection, { customModels = null, disab
           id: customMatch.id,
           modelKey: customMatch.id.includes("/") ? customMatch.id : `${alias}/${customMatch.id}`,
           name: customMatch.name || customMatch.id,
-          kind: customMatch.type || "llm",
+          kind: customMatch.type || customMatch.kind || "llm",
           provider: providerId,
           alias,
         });
-      } else {
+      } else if (!kindFilter || kindFilter === "llm") {
         const modelKey = enabledId.includes("/") ? enabledId : `${alias}/${enabledId}`;
         candidates.push({
           id: enabledId,
@@ -134,14 +141,16 @@ export function resolveConnectionModels(connection, { customModels = null, disab
     }
     if (connection.defaultModel && !candidates.some((c) => c.id === connection.defaultModel)) {
       const regDef = registryModels.find((rm) => rm.id === connection.defaultModel);
-      candidates.unshift({
-        id: connection.defaultModel,
-        modelKey: connection.defaultModel.includes("/") ? connection.defaultModel : `${alias}/${connection.defaultModel}`,
-        name: regDef?.name || connection.defaultModel,
-        kind: "llm",
-        provider: providerId,
-        alias,
-      });
+      if (!kindFilter || isKindMatch(regDef?.kind || regDef?.type)) {
+        candidates.unshift({
+          id: connection.defaultModel,
+          modelKey: connection.defaultModel.includes("/") ? connection.defaultModel : `${alias}/${connection.defaultModel}`,
+          name: regDef?.name || connection.defaultModel,
+          kind: regDef?.kind || regDef?.type || "llm",
+          provider: providerId,
+          alias,
+        });
+      }
     }
     if (candidates.length > 0) return candidates;
   }
@@ -154,7 +163,7 @@ export function resolveConnectionModels(connection, { customModels = null, disab
       id: cm.id,
       modelKey,
       name: cm.name || cm.id,
-      kind: cm.type || "llm",
+      kind: cm.type || cm.kind || "llm",
       provider: providerId,
       alias,
     });
@@ -179,14 +188,17 @@ export function resolveConnectionModels(connection, { customModels = null, disab
   if (connection.defaultModel && !isDisabled(connection.defaultModel)) {
     const defKey = connection.defaultModel.includes("/") ? connection.defaultModel : `${alias}/${connection.defaultModel}`;
     if (!candidates.some((c) => c.modelKey === defKey)) {
-      candidates.unshift({
-        id: connection.defaultModel,
-        modelKey: defKey,
-        name: connection.defaultModel,
-        kind: "llm",
-        provider: providerId,
-        alias,
-      });
+      const regDef = registryModels.find((rm) => rm.id === connection.defaultModel);
+      if (!kindFilter || isKindMatch(regDef?.kind || regDef?.type)) {
+        candidates.unshift({
+          id: connection.defaultModel,
+          modelKey: defKey,
+          name: connection.defaultModel,
+          kind: regDef?.kind || regDef?.type || "llm",
+          provider: providerId,
+          alias,
+        });
+      }
     }
   }
 
@@ -228,11 +240,12 @@ export async function probeProviderModels(connection, options = {}) {
     timeoutMs = 10000,
     customModels = null,
     disabledModels = null,
+    kindFilter = "llm",
   } = options;
 
   if (!connection || connection.isActive === false) return [];
 
-  const candidateModels = await resolveConnectionModels(connection, { customModels, disabledModels });
+  const candidateModels = await resolveConnectionModels(connection, { customModels, disabledModels, kindFilter });
   if (candidateModels.length === 0) return [];
 
   const now = Date.now();
@@ -311,6 +324,7 @@ export async function probeAllActiveConnections(options = {}) {
     force = false,
     maxConcurrency = 3,
     timeoutMs = 10000,
+    kindFilter = "llm",
   } = options;
 
   const active = connections.filter((c) => c && c.isActive !== false && c.provider);
@@ -334,11 +348,26 @@ export async function probeAllActiveConnections(options = {}) {
         timeoutMs,
         customModels,
         disabledModels,
+        kindFilter,
       })
     )
   );
 
-  const allTested = resultsByProvider.flat();
+  // Deduplicate by modelKey across connections (prefer successful or lower latency)
+  const dedupedMap = new Map();
+  for (const item of resultsByProvider.flat()) {
+    if (!item?.model) continue;
+    const existing = dedupedMap.get(item.model);
+    if (!existing) {
+      dedupedMap.set(item.model, item);
+    } else if (!existing.ok && item.ok) {
+      dedupedMap.set(item.model, item);
+    } else if (existing.ok && item.ok && (item.latencyMs || 0) < (existing.latencyMs || Infinity)) {
+      dedupedMap.set(item.model, item);
+    }
+  }
+
+  const allTested = Array.from(dedupedMap.values());
   const working = allTested.filter((m) => m.ok).length;
   const failed = allTested.filter((m) => !m.ok).length;
 
