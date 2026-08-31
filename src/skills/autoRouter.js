@@ -170,12 +170,15 @@ export function extractUserQuery(body) {
     for (let i = body.messages.length - 1; i >= 0; i--) {
       const msg = body.messages[i];
       if (msg && (msg.role === "user" || !msg.role)) {
-        if (typeof msg.content === "string") return msg.content;
-        if (Array.isArray(msg.content)) {
-          return msg.content
+        if (typeof msg.content === "string" && msg.content.trim()) {
+          return msg.content.trim();
+        } else if (Array.isArray(msg.content)) {
+          const text = msg.content
             .filter((p) => p && (p.type === "text" || typeof p === "string"))
             .map((p) => (typeof p === "string" ? p : p.text || ""))
-            .join("\n");
+            .join("\n")
+            .trim();
+          if (text) return text;
         }
       }
     }
@@ -186,7 +189,8 @@ export function extractUserQuery(body) {
     for (let i = body.contents.length - 1; i >= 0; i--) {
       const turn = body.contents[i];
       if (turn && turn.role === "user" && Array.isArray(turn.parts)) {
-        return turn.parts.map((p) => p.text || "").join("\n");
+        const text = turn.parts.map((p) => p.text || "").join("\n").trim();
+        if (text) return text;
       }
     }
   }
@@ -195,8 +199,8 @@ export function extractUserQuery(body) {
   if (Array.isArray(body.input) && body.input.length > 0) {
     for (let i = body.input.length - 1; i >= 0; i--) {
       const item = body.input[i];
-      if (item && item.role === "user" && typeof item.content === "string") {
-        return item.content;
+      if (item && item.role === "user" && typeof item.content === "string" && item.content.trim()) {
+        return item.content.trim();
       }
     }
   }

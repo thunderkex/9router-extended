@@ -62,6 +62,9 @@ const nextConfig = {
     };
     return config;
   },
+  generateBuildId: async () => {
+    return 'release-' + Date.now();
+  },
   async rewrites() {
     return [
       {

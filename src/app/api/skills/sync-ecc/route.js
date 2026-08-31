@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
 import path from "path";
-import fs from "fs/promises";
+import fsSync from "fs";
+import { syncEccSkills } from "../../../../../scripts/sync-ecc-skills.js";
 import { clearSkillIndexCache, getSkillIndex } from "@/skills/autoRouter.js";
-
-const execAsync = promisify(exec);
 
 export async function POST() {
   try {
-    const scriptPath = path.join(process.cwd(), "scripts", "sync-ecc-skills.js");
-    const { stdout, stderr } = await execAsync(`node "${scriptPath}"`);
+    const result = await syncEccSkills();
 
     clearSkillIndexCache();
     const index = await getSkillIndex();
@@ -18,15 +14,16 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       skillsCount: index.skills ? index.skills.length : 0,
-      output: stdout,
-      error: stderr || null,
+      total: result.total,
+      updated: result.updated,
+      skipped: result.skipped,
     });
   } catch (error) {
     console.error("Failed to sync ECC skills:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Failed to execute sync script",
+        error: error.message || "Failed to execute sync",
       },
       { status: 500 }
     );

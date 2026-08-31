@@ -352,6 +352,17 @@ function buildCliPackage() {
     console.log("⏭️  No skills files found\n");
   }
 
+  // Step 7d: Copy scripts directory (contains sync-ecc-skills.js and utilities)
+  console.log("7️⃣ d Copying scripts directory...");
+  const scriptsSrc = path.join(appDir, "scripts");
+  const scriptsDest = path.join(cliAppDir, "scripts");
+  if (fs.existsSync(scriptsSrc)) {
+    copyRecursive(scriptsSrc, scriptsDest);
+    console.log("✅ Copied scripts files\n");
+  } else {
+    console.log("⏭️  No scripts files found\n");
+  }
+
   // Step 8: Build MITM server (config driven - see app/cli/scripts/buildMitm.js)
   console.log("8️⃣  Building MITM server...");
   try {
