@@ -25,6 +25,7 @@ import { updateProviderCredentials, checkAndRefreshToken } from "../services/tok
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { getSkillManifests } from "@/lib/skillsRegistry.js";
 import { classifyPrompt, loadSkillPrompt, formatSkillInjection, ECC_ROUTER_BYPASS_HEADER } from "@/skills/autoRouter.js";
+import { getHermesSystemPromptBlock, appendHermesMemoryEntry } from "@/lib/plugins/hermes/memory.js";
 import { record as healthRecord } from "@/lib/routing/health.js";
 import { incrementFailover } from "@/lib/session/cache.js";
 
@@ -296,6 +297,24 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     }
 
+    // Hermes Agent Memory Injection
+    const hermesToolkitEnabled = chatSettings["hermes-toolkitEnabled"] !== undefined
+      ? !!chatSettings["hermes-toolkitEnabled"]
+      : chatSettings.hermesToolkitEnabled !== undefined
+        ? !!chatSettings.hermesToolkitEnabled
+        : true;
+
+    if (hermesToolkitEnabled) {
+      try {
+        const hermesBlock = await getHermesSystemPromptBlock();
+        if (hermesBlock) {
+          activeGenericPrompts.push({ id: "hermes-toolkit", prompt: hermesBlock });
+        }
+      } catch (err) {
+        log.warn("HERMES", `Hermes memory read failed (fail-open): ${err.message}`);
+      }
+    }
+
     // ECC Auto Skill Router: dynamically match query and inject prompt
     const eccBypass = clientRawRequest?.headers?.[ECC_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off" || clientRawRequest?.headers?.["x-9router-skill-router"]?.toLowerCase() === "off";
     const eccRouterEnabled = !eccBypass && (
@@ -388,6 +407,31 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     if (result.success) {
       healthRecord(provider, { success: true, latencyMs: Date.now() - t0 });
+
+      // Auto-save learned context/memory asynchronously if user query has key facts or preferences
+      const autoSave = chatSettings.hermes_auto_save_memory !== undefined
+        ? !!chatSettings.hermes_auto_save_memory
+        : chatSettings.auto_save_memory !== undefined
+          ? !!chatSettings.auto_save_memory
+          : true;
+
+      if (hermesToolkitEnabled && autoSave) {
+        Promise.resolve().then(async () => {
+          try {
+            const lastUserText = typeof body === "object" ? (
+              Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === "user").pop()?.content :
+              Array.isArray(body.input) ? body.input.filter((i) => i && i.role === "user").pop()?.content :
+              null
+            ) : null;
+            if (typeof lastUserText === "string" && lastUserText.length > 25 && /remember|preference|prefer|always|never|rule|convention/i.test(lastUserText)) {
+              await appendHermesMemoryEntry("user", `User note: ${lastUserText.slice(0, 300)}`);
+            }
+          } catch {
+            // fail-open
+          }
+        });
+      }
+
       return result.response;
     }
 
