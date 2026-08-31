@@ -6,15 +6,21 @@ import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import {
+  HERMES_HOME_DIR,
+  HERMES_CONFIG_PATH,
+  HERMES_ENV_PATH,
+  getHermesHomeDir,
+  getHermesConfigPath,
+  getHermesEnvPath,
+} from "@/lib/plugins/hermes/paths.js";
 
 const execAsync = promisify(exec);
 
 const PROVIDER_NAME = "9router";
 const API_KEY_ENV = "OPENAI_API_KEY";
 
-const getHermesDir = () => path.join(os.homedir(), ".hermes");
-const getHermesConfigPath = () => path.join(getHermesDir(), "config.yaml");
-const getHermesEnvPath = () => path.join(getHermesDir(), ".env");
+const getHermesDir = () => HERMES_HOME_DIR;
 
 // Match top-level "model:" block (until next non-indented, non-empty line)
 const MODEL_BLOCK_RE = /^model:[ \t]*\r?\n((?:[ \t]+.*\r?\n?|[ \t]*\r?\n)*)/m;
