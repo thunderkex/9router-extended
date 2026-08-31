@@ -1,3 +1,25 @@
+# v0.5.57-extended (2026-08-27)
+
+## 🎯 Major Features & Observability
+
+### ECC Auto Skill Router Observability & Storage
+- **End-to-End Skill Tracing**: Wire matched skill activations (`name`, `confidence`) from semantic classifier into the core request context across streaming, non-streaming, and SSE-to-JSON pipelines.
+- **Real-Time Dashboard Integration**: Live recent requests table and in-memory ring buffer now propagate and render active ECC skill badges (`⚡ skill-name`) immediately.
+- **SQLite Persistence**: Store skill metadata in `usageHistory.meta` and batched `requestDetails.data.eccSkills` for historical analytics and debugging.
+- **Live Request Logger Integration**: Real-time log stream tags skill activations (`⚡ skill-name`) with instant search and filter capabilities.
+- **Request Details Drawer**: Dedicated ECC Skill Router inspection card displaying matched skills with percentage confidence scores.
+- **Table Alignment & Badges**: Inline skill badges in the request details table with corrected 9-column grid layout.
+
+### Routing & Health Monitor Metrics
+- **Beginner-Friendly Metric Labels**: Replaced confusing latency jargon (p50/p95) with clear labels: "Avg Response Time", "Speed", and "Response Time (Fastest)".
+- **EMA Latency Binding**: Direct binding to exponential moving average (`emaLatency`) health stream metrics with graceful fallback.
+
+### Auto-Start & Process Management
+- **PM2 Windows Auto-Start Setup**: Added automated PowerShell script (`scripts/setup-pm2-windows.ps1`) and `npm run pm2:setup:windows` script for reliable background operation on Windows boot.
+- **Ecosystem Configuration**: Enhanced `ecosystem.config.cjs` dynamic entry point resolution across local repo, global npm, and Bun installations.
+
+---
+
 # v0.5.56-extended (2026-08-26)
 
 ## 🎯 Major Features

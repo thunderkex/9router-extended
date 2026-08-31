@@ -59,6 +59,7 @@ export default function RequestLogger() {
     if (parts.length < 7) return null;
     
     const status = parts[6];
+    const skill = parts[7] || null;
     const isPending = status.includes("PENDING");
     const isFailed = status.includes("FAILED");
     const isSuccess = status.includes("OK");
@@ -72,6 +73,7 @@ export default function RequestLogger() {
       inputTokens: parts[4],
       outputTokens: parts[5],
       status,
+      skill,
       isPending,
       isFailed,
       isSuccess
@@ -92,7 +94,8 @@ export default function RequestLogger() {
       return (
         log.model.toLowerCase().includes(search) ||
         log.provider.toLowerCase().includes(search) ||
-        log.account.toLowerCase().includes(search)
+        log.account.toLowerCase().includes(search) ||
+        (log.skill && log.skill.toLowerCase().includes(search))
       );
     }
     
@@ -219,7 +222,16 @@ export default function RequestLogger() {
                     className={`hover:bg-primary/5 transition-colors ${log.isPending ? "bg-primary/5" : ""}`}
                   >
                     <td className="px-3 py-2 border-r border-border text-text-muted">{log.timestamp}</td>
-                    <td className="px-3 py-2 border-r border-border font-medium text-text-main">{log.model}</td>
+                    <td className="px-3 py-2 border-r border-border font-medium text-text-main">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{log.model}</span>
+                        {log.skill && (
+                          <span className="px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary text-[10px] font-mono" title={`ECC Skill: ${log.skill}`}>
+                            ⚡ {log.skill}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-2 border-r border-border">
                       <span className="px-1.5 py-0.5 rounded bg-surface-2 border border-border text-[10px] uppercase font-bold">
                         {log.provider}

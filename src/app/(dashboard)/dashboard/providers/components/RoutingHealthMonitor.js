@@ -86,8 +86,11 @@ export default function RoutingHealthMonitor() {
       const statB = healthData[b] || {};
       
       switch (sortBy) {
-        case "latency":
-          return (statA.p50 || 0) - (statB.p50 || 0);
+        case "latency": {
+          const latA = statA.emaLatency ?? statA.p50 ?? 0;
+          const latB = statB.emaLatency ?? statB.p50 ?? 0;
+          return latA - latB;
+        }
         case "success":
           return (statB.successRate || 0) - (statA.successRate || 0);
         case "name":
@@ -101,11 +104,11 @@ export default function RoutingHealthMonitor() {
 
   const stats = useMemo(() => {
     const total = providerKeys.length;
-    const closed = providerKeys.filter(k => (healthData[k]?.circuitState || "CLOSED") === "CLOSED").length;
-    const open = providerKeys.filter(k => (healthData[k]?.circuitState || "CLOSED") === "OPEN").length;
-    const halfOpen = providerKeys.filter(k => (healthData[k]?.circuitState || "CLOSED") === "HALF_OPEN").length;
+    const closed = providerKeys.filter(k => (healthData[k]?.circuitState || "CLOSED").toUpperCase() === "CLOSED").length;
+    const open = providerKeys.filter(k => (healthData[k]?.circuitState || "CLOSED").toUpperCase() === "OPEN").length;
+    const halfOpen = providerKeys.filter(k => (healthData[k]?.circuitState || "CLOSED").toUpperCase() === "HALF_OPEN" || (healthData[k]?.circuitState || "CLOSED").toUpperCase() === "HALF-OPEN").length;
     const avgLatency = total > 0 
-      ? Math.round(providerKeys.reduce((sum, k) => sum + (healthData[k]?.p50 || 0), 0) / total)
+      ? Math.round(providerKeys.reduce((sum, k) => sum + (healthData[k]?.emaLatency ?? healthData[k]?.p50 ?? 0), 0) / total)
       : 0;
     
     return { total, closed, open, halfOpen, avgLatency };
@@ -167,7 +170,7 @@ export default function RoutingHealthMonitor() {
                 <p className="text-lg font-bold text-warning">{stats.halfOpen}</p>
               </div>
               <div className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
-                <p className="text-[10px] uppercase font-semibold tracking-wider text-primary/80 mb-0.5">Avg P50</p>
+                <p className="text-[10px] uppercase font-semibold tracking-wider text-primary/80 mb-0.5">Avg Response Time</p>
                 <p className="text-lg font-bold text-primary">{stats.avgLatency}ms</p>
               </div>
             </div>
@@ -202,7 +205,7 @@ export default function RoutingHealthMonitor() {
                   className="px-3 py-1.5 text-xs rounded-md bg-surface-2 border border-border focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="name">Sort: Name</option>
-                  <option value="latency">Sort: Latency ↑</option>
+                  <option value="latency">Sort: Response Time (Fastest) ↑</option>
                   <option value="success">Sort: Success ↓</option>
                 </select>
               </div>
@@ -255,12 +258,12 @@ export default function RoutingHealthMonitor() {
 
                     <div className="grid grid-cols-3 gap-1 text-[11px] text-text-muted">
                       <div>
-                        <span className="block text-[10px] uppercase font-semibold tracking-wider opacity-70">P50</span>
-                        <span className="font-mono text-text-main font-medium">{Math.round(stat.p50 || 0)}ms</span>
+                        <span className="block text-[10px] uppercase font-semibold tracking-wider opacity-70">Speed</span>
+                        <span className="font-mono text-text-main font-medium">{Math.round(stat.emaLatency ?? stat.p50 ?? 0)}ms</span>
                       </div>
                       <div>
-                        <span className="block text-[10px] uppercase font-semibold tracking-wider opacity-70">P95</span>
-                        <span className="font-mono text-text-main font-medium">{Math.round(stat.p95 || 0)}ms</span>
+                        <span className="block text-[10px] uppercase font-semibold tracking-wider opacity-70">Failures</span>
+                        <span className="font-mono text-text-main font-medium">{stat.consecutiveFails ?? 0}</span>
                       </div>
                       <div>
                         <span className="block text-[10px] uppercase font-semibold tracking-wider opacity-70">Success</span>
