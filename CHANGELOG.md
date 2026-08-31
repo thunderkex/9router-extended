@@ -1,3 +1,22 @@
+# v0.5.59-extended (2026-08-31)
+
+## 🎯 Major Features & Enhancements
+
+### Hermes Agent & Headroom Auto-Start Service
+- **Automatic Daemon Startup on Bootstrap**: Headroom proxy and Hermes Agent service automatically boot during 9Router's deferred startup cycle when installed and enabled in settings.
+- **Hermes Plugin Card**: Added full-featured dashboard card in Extended tab with real-time status monitoring, installation state, process controls (start/stop/restart), and live log streaming.
+- **Process & Lifecycle Management**: Service lifecycle engine managing Hermes background process, PID tracking, and graceful restart/stop operations.
+- **Telegram Gateway Integration**: Telegram bot token and chat configuration UI with live validation and connection testing.
+- **Persistent Memory Synchronization**: Bidirectional memory sync between 9Router chat requests and Hermes Agent persistent store (`MEMORY.md`, `USER.md`). Automatically injects Hermes memory into system prompt context and extracts user/assistant facts into memory files.
+- **Prompt Injection & Auto-Routing**: Automatic injection of `hermes-toolkit` skill definitions into chat completions request context when applicable.
+
+### ECC Auto Skill Router & Routing Improvements
+- **Model Probing & Filtering**: Filter non-LLM models, deduplicate auto-combo candidates, and increase health probe timeout to 10s.
+- **ECC Skill Card**: Deduplicate ECC skill cards in dashboard and ignore build artifacts.
+- **Continuity Handling**: Provider-level continuity stripping in core chat handler.
+
+---
+
 # v0.5.57-extended (2026-08-27)
 
 ## 🎯 Major Features & Observability
