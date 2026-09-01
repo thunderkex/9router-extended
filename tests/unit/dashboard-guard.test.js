@@ -266,6 +266,75 @@ describe("dashboard guard local-only access", () => {
 
     expect(response).toBe(mocks.nextResponse);
   });
+
+  it("blocks spawn-capable routes from non-loopback even with auth", async () => {
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+
+    const routes = [
+      "/api/headroom/restart",
+      "/api/headroom/auto-setup",
+      "/api/headroom/extras",
+      "/api/headroom/update",
+      "/api/pxpipe/install",
+      "/api/pxpipe/start",
+      "/api/pxpipe/stop",
+      "/api/pxpipe/restart",
+      "/api/pxpipe/update",
+      "/api/skills/install",
+      "/api/cli-tools/hermes-settings",
+      "/api/plugins/hermes/update",
+    ];
+
+    for (const r of routes) {
+      const response = await proxy(request(r, { host: "router.example.com" }));
+      expect(response.status, `Expected 403 for ${r}`).toBe(403);
+    }
+  });
+
+  it("allows spawn-capable routes from loopback with auth", async () => {
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+
+    const routes = [
+      "/api/headroom/restart",
+      "/api/pxpipe/restart",
+      "/api/skills/install",
+    ];
+
+    for (const r of routes) {
+      const req = localRequest(r, { host: "localhost:20128", origin: "http://localhost:20128" });
+      req.cookies = { get: vi.fn(() => ({ value: "valid-jwt" })) };
+      const response = await proxy(req);
+      expect(response).toBe(mocks.nextResponse);
+    }
+  });
+
+  it("blocks API calls when tunnelDashboardAccess is false from tunnel host", async () => {
+    mocks.getSettings.mockResolvedValue({
+      tunnelDashboardAccess: false,
+      tunnelUrl: "https://my-tunnel.trycloudflare.com",
+    });
+
+    const response = await proxy(request("/api/providers", {
+      host: "my-tunnel.trycloudflare.com",
+    }));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Remote access disabled via tunnel/tailscale");
+  });
+
+  it("allows API calls when tunnelDashboardAccess is true from tunnel host with auth", async () => {
+    mocks.getSettings.mockResolvedValue({
+      tunnelDashboardAccess: true,
+      tunnelUrl: "https://my-tunnel.trycloudflare.com",
+    });
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+
+    const req = request("/api/providers", { host: "my-tunnel.trycloudflare.com" });
+    req.cookies = { get: vi.fn(() => ({ value: "valid-jwt" })) };
+    const response = await proxy(req);
+
+    expect(response).toBe(mocks.nextResponse);
+  });
 });
 
 describe("dashboard guard helpers", () => {

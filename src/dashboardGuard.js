@@ -66,12 +66,14 @@ const PROTECTED_API_PATHS = [
   "/api/translator",
   "/api/tunnel",
   "/api/plugins",
+  "/api/pxpipe",
+  "/api/skills",
+  "/api/headroom",
 ];
 
-// Routes that spawn child processes or read host secrets — restrict to localhost.
+// Routes that spawn child processes, install packages, or read host secrets — restrict to localhost.
 const LOCAL_ONLY_PATHS = [
-  "/api/cli-tools/cowork-settings",
-  "/api/cli-tools/antigravity-mitm",
+  "/api/cli-tools/",
   "/api/mcp/",
   "/api/tunnel/tailscale-install",
   "/api/tunnel/tailscale-enable",
@@ -79,17 +81,31 @@ const LOCAL_ONLY_PATHS = [
   "/api/tunnel/tailscale-check",
   "/api/tunnel/enable",
   "/api/tunnel/disable",
+  "/api/tunnel/update",
   "/api/oauth/cursor/auto-import",
   "/api/oauth/kiro/auto-import",
   "/api/auth/reset-password",
   "/api/headroom/start",
   "/api/headroom/stop",
+  "/api/headroom/restart",
+  "/api/headroom/auto-setup",
+  "/api/headroom/extras",
+  "/api/headroom/update",
   "/api/headroom/proxy",
   "/api/plugins/hermes/install",
   "/api/plugins/hermes/start",
   "/api/plugins/hermes/stop",
   "/api/plugins/hermes/restart",
+  "/api/plugins/hermes/update",
+  "/api/plugins/hermes/dashboard",
   "/api/plugins/hermes/telegram",
+  "/api/plugins/update-check",
+  "/api/pxpipe/install",
+  "/api/pxpipe/start",
+  "/api/pxpipe/stop",
+  "/api/pxpipe/restart",
+  "/api/pxpipe/update",
+  "/api/skills/install",
 ];
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -196,20 +212,50 @@ function isPublicApi(pathname) {
   return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+function isViaBlockedTunnelHost(request, settings) {
+  if (!settings || settings.tunnelDashboardAccess === true) return false;
+  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  let tunnelHost = "";
+  let tailscaleHost = "";
+  try {
+    if (settings.tunnelUrl) tunnelHost = new URL(settings.tunnelUrl).hostname.toLowerCase();
+  } catch {}
+  try {
+    if (settings.tailscaleUrl) tailscaleHost = new URL(settings.tailscaleUrl).hostname.toLowerCase();
+  } catch {}
+  return (tunnelHost && host === tunnelHost) || (tailscaleHost && host === tailscaleHost);
+}
+
 export const __test__ = {
   isLocalRequest,
   isPublicLlmApi,
   extractApiKey,
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,
+  isViaBlockedTunnelHost,
 };
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
+  const settings = await loadSettings();
+
+  // Block tunnel/tailscale host access if tunnelDashboardAccess is explicitly false
+  if (isViaBlockedTunnelHost(request, settings)) {
+    if (pathname.startsWith("/api/")) {
+      console.warn(`[guard] Blocked remote API access via tunnel host: ${pathname} from host: ${request.headers.get("host")}`);
+      return NextResponse.json({ error: "Remote access disabled via tunnel/tailscale" }, { status: 403 });
+    }
+    if (pathname.startsWith("/dashboard")) {
+      console.warn(`[guard] Blocked remote dashboard access via tunnel host: ${pathname} from host: ${request.headers.get("host")}`);
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+  }
+
   // Local-only gate for spawn-capable / host-secret routes.
   if (LOCAL_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
     if (!(await canAccessLocalOnlyRoute(request))) {
+      console.warn(`[guard] Local-only rejection for route: ${pathname}`);
       return NextResponse.json({ error: "Local only: CLI token required" }, { status: 403 });
     }
   }
@@ -237,26 +283,14 @@ export async function proxy(request) {
   // Protect all dashboard routes
   if (pathname.startsWith("/dashboard")) {
     let requireLogin = true;
-    let tunnelDashboardAccess = true;
 
     try {
-      const settings = await loadSettings();
-      if (settings) {
-        requireLogin = settings.requireLogin !== false;
-        tunnelDashboardAccess = settings.tunnelDashboardAccess === true;
-
-        // Block tunnel/tailscale access if disabled (redirect to login)
-        if (!tunnelDashboardAccess) {
-          const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
-          const tunnelHost = settings.tunnelUrl ? new URL(settings.tunnelUrl).hostname.toLowerCase() : "";
-          const tailscaleHost = settings.tailscaleUrl ? new URL(settings.tailscaleUrl).hostname.toLowerCase() : "";
-          if ((tunnelHost && host === tunnelHost) || (tailscaleHost && host === tailscaleHost)) {
-            return NextResponse.redirect(new URL("/login", request.url));
-          }
-        }
+      const currentSettings = settings || (await loadSettings());
+      if (currentSettings) {
+        requireLogin = currentSettings.requireLogin !== false;
       }
     } catch {
-      // On error, keep defaults (require login, block tunnel)
+      // On error, keep defaults (require login)
     }
 
     // If login not required, allow through
