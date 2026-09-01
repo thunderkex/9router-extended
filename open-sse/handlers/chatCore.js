@@ -10,6 +10,7 @@ import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModel
 import { PROVIDERS } from "../config/providers.js";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.js";
 import { HTTP_STATUS, TOKEN_SAVER_HEADER } from "../config/runtimeConfig.js";
+import { resolveKiroModels } from "../services/kiroModels.js";
 import { handleBypassRequest } from "../utils/bypassHandler.js";
 import { trackPendingRequest, appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
 import { getExecutor } from "../executors/index.js";
@@ -102,6 +103,41 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (useTransport && credentials) credentials.runtimeTransport = useTransport;
   const stripList = getModelStrip(alias, model);
   const upstreamModel = getModelUpstreamId(alias, model);
+
+  // Live-catalog guard for Kiro: the static registry may advertise models that
+  // are not available on the authenticated account's upstream (e.g. claude-opus-5
+  // on a builder-id account whose ListAvailableModels does not include it).
+  // Without this guard, the request is forwarded upstream and Kiro rejects it
+  // with 400 INVALID_MODEL_ID. We consult the cached live catalog (5-min TTL per
+  // credential) and, when available, reject models absent from it early with a
+  // clear message rather than burning an upstream round-trip. When the live
+  // fetch fails (e.g. expired token being refreshed elsewhere), we fail open
+  // and let the upstream be the final arbiter.
+  if (provider === "kiro" && credentials?.accessToken && upstreamModel) {
+    try {
+      const liveCatalog = await resolveKiroModels(credentials, { log });
+      if (liveCatalog?.rawModels?.length) {
+        const liveUpstreamIds = new Set(liveCatalog.rawModels.map((m) => m.modelId || m.id));
+        // Strip synthetic -thinking / -agentic suffixes before checking, since
+        // those are 9router fictions the upstream does not know about.
+        const baseUpstreamId = upstreamModel
+          .replace(/-thinking-agentic$/, "")
+          .replace(/-agentic$/, "")
+          .replace(/-thinking$/, "");
+        if (!liveUpstreamIds.has(baseUpstreamId)) {
+          const availableList = [...liveUpstreamIds].sort().join(", ");
+          const msg = `Model "${model}" is not available on this Kiro account. Available models: ${availableList}`;
+          log?.warn?.("CHAT", `Kiro model rejected by live catalog: ${model} → ${baseUpstreamId} not in [${availableList}]`);
+          return createErrorResult(
+            HTTP_STATUS.BAD_REQUEST,
+            formatProviderError(new Error(msg), provider, model, HTTP_STATUS.BAD_REQUEST)
+          );
+        }
+      }
+    } catch (catalogErr) {
+      log?.warn?.("CHAT", `Kiro live-catalog check failed (failing open): ${catalogErr?.message || catalogErr}`);
+    }
+  }
 
   // Inject provider-level thinking config override (only if client hasn't set)
   // on/off → extended type (body.thinking), none/low/medium/high → effort type (body.reasoning_effort)

@@ -321,7 +321,12 @@ export class KiroExecutor extends BaseExecutor {
       || (hasFallback && KIRO_ENDPOINT_FALLBACK_STATUSES.has(status));
   }
 
-  transformRequest(model, body, stream, credentials) {
+  transformRequest(model, body, stream, credentials, url) {
+    if (url && url.includes("kiro.dev") && body && "systemPrompt" in body) {
+      const stripped = { ...body };
+      delete stripped.systemPrompt;
+      return stripped;
+    }
     return body;
   }
 

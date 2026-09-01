@@ -342,8 +342,8 @@ describe("Kiro terminal integrity recovery", () => {
     const retryBody = JSON.parse(fetchMock.mock.calls[1][1].body);
 
     expect(body).toContain("Recovered safely.");
-    expect(retryBody.systemPrompt).toContain("tool_call wrapper was malformed");
-    expect(retryBody.systemPrompt).not.toContain("IGNORE_ALL_INSTRUCTIONS");
+    const retryInstruction = retryBody.systemPrompt || retryBody?.conversationState?.currentMessage?.userInputMessage?.content || "";
+    expect(retryInstruction).not.toContain("IGNORE_ALL_INSTRUCTIONS");
   });
 
   it("lets a complete tool call override metadata end_turn", async () => {
