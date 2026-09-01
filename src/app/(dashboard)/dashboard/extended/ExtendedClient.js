@@ -166,10 +166,13 @@ export default function ExtendedClient() {
   const [formPrompt, setFormPrompt] = useState("");
   const [formHookScript, setFormHookScript] = useState(DEFAULT_PRE_ROUTE_SCRIPT);
   const [formInstallCmd, setFormInstallCmd] = useState("");
+  const [formUpdateCmd, setFormUpdateCmd] = useState("");
   const [formUninstallCmd, setFormUninstallCmd] = useState("");
   const [formConfigs, setFormConfigs] = useState([]);
   
-  // How to Use Modal State
+  // Updates State for CLI skills (Graphify, MCP Inspector, etc.)
+  const [cliUpdates, setCliUpdates] = useState({});
+  const [updatingSkill, setUpdatingSkill] = useState(null);
   const [showHowToUseModal, setShowHowToUseModal] = useState(false);
   const [selectedSkillForGuide, setSelectedSkillForGuide] = useState(null);
 
@@ -187,6 +190,19 @@ export default function ExtendedClient() {
       if (skillsRes.ok) {
         const sk = await skillsRes.json();
         setSkills(sk);
+        
+        // Check updates for all skills with sources (CLI and prompt skills)
+        const trackableList = sk.filter((s) => s.version || s.hook === "install-cli" || ["caveman", "ponytail", "rtk", "commit-lint", "watermarks-remover", "taste-skill"].includes(s.id));
+        for (const s of trackableList) {
+          fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(s.id)}`)
+            .then((r) => r.ok ? r.json() : null)
+            .then((up) => {
+              if (up) {
+                setCliUpdates((prev) => ({ ...prev, [s.id]: up }));
+              }
+            })
+            .catch(() => {});
+        }
       }
       if (eccRes && eccRes.ok) {
         const eccData = await eccRes.json();
@@ -270,6 +286,29 @@ export default function ExtendedClient() {
     }
   };
 
+  const handleUpdateSkill = async (skill) => {
+    setUpdatingSkill(skill.id);
+    try {
+      const res = await fetch("/api/skills/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: skill.id, action: "update" }),
+      });
+      if (res.ok) {
+        // Re-check update status
+        const upRes = await fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(skill.id)}`);
+        if (upRes.ok) {
+          const up = await upRes.json();
+          setCliUpdates((prev) => ({ ...prev, [skill.id]: up }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to update skill:", e);
+    } finally {
+      setUpdatingSkill(null);
+    }
+  };
+
   const handleDeleteSkill = async () => {
     if (!skillToDelete) return;
     setDeletingSkill(skillToDelete.id);
@@ -299,6 +338,7 @@ export default function ExtendedClient() {
       (tmpl.hook === "post-response" ? DEFAULT_POST_RESPONSE_SCRIPT : DEFAULT_PRE_ROUTE_SCRIPT)
     );
     setFormInstallCmd(tmpl.install_command || "");
+    setFormUpdateCmd(tmpl.update_command || "");
     setFormUninstallCmd(tmpl.uninstall_command || "");
     setFormSource(tmpl.source || "");
     setFormConfigs(tmpl.config_schema || []);
@@ -347,13 +387,14 @@ export default function ExtendedClient() {
     };
     if (formHook === "install-cli") {
       if (formInstallCmd) manifest.install_command = formInstallCmd;
+      if (formUpdateCmd) manifest.update_command = formUpdateCmd;
       if (formUninstallCmd) manifest.uninstall_command = formUninstallCmd;
     }
     if (formConfigs.length > 0) {
       manifest.config_schema = formConfigs;
     }
     return manifest;
-  }, [formId, formName, formDesc, formHook, formSource, formInstallCmd, formUninstallCmd, formConfigs]);
+  }, [formId, formName, formDesc, formHook, formSource, formInstallCmd, formUpdateCmd, formUninstallCmd, formConfigs]);
 
   const handleSaveSkill = async () => {
     if (!formId || !formName) return;
@@ -377,6 +418,7 @@ export default function ExtendedClient() {
         setFormDesc("");
         setFormPrompt("");
         setFormInstallCmd("");
+        setFormUpdateCmd("");
         setFormUninstallCmd("");
         setFormSource("");
         setFormConfigs([]);
@@ -553,6 +595,27 @@ export default function ExtendedClient() {
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <h3 className="font-semibold text-sm text-text-main">{skill.name}</h3>
                         <Badge variant="default" size="sm">System Prompt</Badge>
+                        {(() => {
+                          const up = cliUpdates[skill.id];
+                          const currentVer = up?.currentVersion || skill.version;
+                          const hasUpdate = up?.hasUpdate;
+                          const latestVer = up?.latestVersion;
+
+                          return (
+                            <>
+                              {currentVer && (
+                                <Badge variant="success" size="sm">
+                                  v{currentVer.replace(/^v/, "")}
+                                </Badge>
+                              )}
+                              {hasUpdate && (
+                                <Badge variant="warning" size="sm" className="animate-pulse">
+                                  v{latestVer} available
+                                </Badge>
+                              )}
+                            </>
+                          );
+                        })()}
                         {skill.source && skill.source !== "custom" && (
                           <a
                             href={skill.source}
@@ -569,6 +632,17 @@ export default function ExtendedClient() {
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+                      {cliUpdates[skill.id]?.hasUpdate && (
+                        <Button
+                          size="sm"
+                          variant="warning"
+                          onClick={() => handleUpdateSkill(skill)}
+                          loading={updatingSkill === skill.id}
+                          className="h-8 text-xs font-semibold px-2.5"
+                        >
+                          Sync Update
+                        </Button>
+                      )}
                       <Toggle checked={isEnabled} onChange={() => handleSkillToggle(skill, !isEnabled)} />
                       {skill.source === "custom" && (
                         <button
@@ -661,6 +735,62 @@ export default function ExtendedClient() {
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+                    {(() => {
+                      const up = cliUpdates[skill.id];
+                      const hasUpdate = up?.hasUpdate;
+                      const isUpToDate = up && !up.hasUpdate && up.currentVersion;
+                      const autoUpdateKey = `${skill.id.replace(/-/g, "")}AutoUpdate`;
+                      const isAutoUpdateEnabled = !!settings[autoUpdateKey];
+
+                      return (
+                        <div className="flex items-center gap-2">
+                          {isInstalled && (
+                            <label className="flex items-center gap-1.5 text-xs text-text-muted cursor-pointer select-none mr-1" title="Automatically check and install updates during background watchdog cycles">
+                              <input
+                                type="checkbox"
+                                checked={isAutoUpdateEnabled}
+                                onChange={(e) => {
+                                  setSettings((prev) => ({ ...prev, [autoUpdateKey]: e.target.checked }));
+                                  patchSetting({ [autoUpdateKey]: e.target.checked });
+                                }}
+                                className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 cursor-pointer"
+                              />
+                              <span>Auto-update</span>
+                            </label>
+                          )}
+
+                          {hasUpdate && (
+                            <Badge variant="warning" size="sm" className="animate-pulse">
+                              v{up.latestVersion} available
+                            </Badge>
+                          )}
+                          {isUpToDate && (
+                            <Badge variant="success" size="sm">
+                              v{up.currentVersion}
+                            </Badge>
+                          )}
+
+                          {hasUpdate && isInstalled && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handleUpdateSkill(skill)}
+                              disabled={updatingSkill === skill.id}
+                            >
+                              {updatingSkill === skill.id ? (
+                                "Updating..."
+                              ) : (
+                                <>
+                                  <span className="material-symbols-outlined text-[16px] mr-1">sync</span>
+                                  Update
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     <Button
                       variant="secondary"
                       size="sm"
@@ -931,13 +1061,22 @@ export default function ExtendedClient() {
 
               {/* CLI Tool specific: Commands */}
               {formHook === "install-cli" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-2/60 p-4 rounded-xl border border-border">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-surface-2/60 p-4 rounded-xl border border-border">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-text-main">Install Command</label>
                     <Input
                       value={formInstallCmd}
                       onChange={(e) => setFormInstallCmd(e.target.value)}
                       placeholder="npm install -g @scope/package"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-main">Update Command</label>
+                    <Input
+                      value={formUpdateCmd}
+                      onChange={(e) => setFormUpdateCmd(e.target.value)}
+                      placeholder="npm install -g @scope/package@latest"
                       className="font-mono text-xs"
                     />
                   </div>

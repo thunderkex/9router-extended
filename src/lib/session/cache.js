@@ -28,6 +28,7 @@ const lru = new Map();
  * @property {string}  compiledPromptHash - Hash of compiled system prompt output
  * @property {number}  failoverCount   - Times this session fell back to another provider
  * @property {number}  lastSeenAt      - epoch ms
+ * @property {number}  lastMemoryExtractionAt - epoch ms when memory extraction was last triggered
  */
 
 function evictExpired() {
@@ -72,7 +73,7 @@ export function getSession(sessionId) {
  * @returns {SessionEntry}
  */
 export function setSession(sessionId, updates) {
-  const existing = lru.get(sessionId) ?? { skillSetHash: "", compiledPromptHash: "", failoverCount: 0, lastSeenAt: 0 };
+  const existing = lru.get(sessionId) ?? { skillSetHash: "", compiledPromptHash: "", failoverCount: 0, lastSeenAt: 0, lastMemoryExtractionAt: 0 };
   const next = { ...existing, ...updates, lastSeenAt: Date.now() };
 
   if (lru.has(sessionId)) lru.delete(sessionId); // re-insert for MRU
@@ -93,7 +94,7 @@ export function setSession(sessionId, updates) {
  * @returns {number} new failoverCount
  */
 export function incrementFailover(sessionId) {
-  const entry = getSession(sessionId) ?? { skillSetHash: "", compiledPromptHash: "", failoverCount: 0, lastSeenAt: 0 };
+  const entry = getSession(sessionId) ?? { skillSetHash: "", compiledPromptHash: "", failoverCount: 0, lastSeenAt: 0, lastMemoryExtractionAt: 0 };
   const next = setSession(sessionId, { failoverCount: entry.failoverCount + 1 });
   return next.failoverCount;
 }

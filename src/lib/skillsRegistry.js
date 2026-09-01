@@ -101,6 +101,7 @@ export async function createCustomSkill(skillData) {
       id: skillData.id,
       name: skillData.name,
       description: skillData.description,
+      version: skillData.version || "1.0.0",
       category: skillData.category || (skillData.hook === "install-cli" ? "agent-skill" : "prompt-injection"),
       hook: skillData.hook || "system-prompt",
       default_enabled: skillData.default_enabled !== false,
@@ -108,6 +109,7 @@ export async function createCustomSkill(skillData) {
     };
 
     if (skillData.install_command) manifest.install_command = skillData.install_command;
+    if (skillData.update_command) manifest.update_command = skillData.update_command;
     if (skillData.uninstall_command) manifest.uninstall_command = skillData.uninstall_command;
     if (skillData.config_schema && skillData.config_schema.length > 0) {
       manifest.config_schema = skillData.config_schema;

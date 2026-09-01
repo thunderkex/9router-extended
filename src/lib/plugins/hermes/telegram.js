@@ -71,24 +71,39 @@ export function getTelegramConfig() {
 }
 
 export function saveTelegramConfig(updates = {}) {
+  const current = getTelegramConfig();
   const envPath = getHermesEnvPath();
   let content = "";
   if (fs.existsSync(envPath)) {
     content = fs.readFileSync(envPath, "utf8");
   }
 
+  const merged = {
+    botToken: updates.botToken !== undefined ? (updates.botToken?.trim() ?? "") : current.botToken,
+    allowedUsers: updates.allowedUsers !== undefined ? (updates.allowedUsers?.trim() ?? "") : current.allowedUsers,
+    allowAllUsers: updates.allowAllUsers !== undefined ? !!updates.allowAllUsers : current.allowAllUsers,
+    groupAllowedChats: updates.groupAllowedChats !== undefined ? (updates.groupAllowedChats?.trim() ?? "") : current.groupAllowedChats,
+    gatewayAllowAll: updates.gatewayAllowAll !== undefined ? !!updates.gatewayAllowAll : current.gatewayAllowAll,
+    homeChannel: updates.homeChannel !== undefined ? (updates.homeChannel?.trim() ?? "") : current.homeChannel,
+    homeChannelName: updates.homeChannelName !== undefined ? (updates.homeChannelName?.trim() ?? "") : current.homeChannelName,
+    cronThreadId: updates.cronThreadId !== undefined ? (updates.cronThreadId?.trim() ?? "") : current.cronThreadId,
+    webhookUrl: updates.webhookUrl !== undefined ? (updates.webhookUrl?.trim() ?? "") : current.webhookUrl,
+    webhookPort: updates.webhookPort !== undefined ? (updates.webhookPort?.trim() ?? "") : current.webhookPort,
+    webhookSecret: updates.webhookSecret !== undefined ? (updates.webhookSecret?.trim() ?? "") : current.webhookSecret,
+  };
+
   const map = {
-    TELEGRAM_BOT_TOKEN: updates.botToken?.trim() ?? "",
-    TELEGRAM_ALLOWED_USERS: updates.allowedUsers?.trim() ?? "",
-    TELEGRAM_ALLOW_ALL_USERS: updates.allowAllUsers !== undefined ? (updates.allowAllUsers ? "true" : "") : "true",
-    TELEGRAM_GROUP_ALLOWED_CHATS: updates.groupAllowedChats?.trim() ?? "*",
-    GATEWAY_ALLOW_ALL_USERS: updates.gatewayAllowAll ? "true" : "",
-    TELEGRAM_HOME_CHANNEL: updates.homeChannel?.trim() ?? "",
-    TELEGRAM_HOME_CHANNEL_NAME: updates.homeChannelName?.trim() ?? "",
-    TELEGRAM_CRON_THREAD_ID: updates.cronThreadId?.trim() ?? "",
-    TELEGRAM_WEBHOOK_URL: updates.webhookUrl?.trim() ?? "",
-    TELEGRAM_WEBHOOK_PORT: updates.webhookPort?.trim() ?? "",
-    TELEGRAM_WEBHOOK_SECRET: updates.webhookSecret?.trim() ?? "",
+    TELEGRAM_BOT_TOKEN: merged.botToken,
+    TELEGRAM_ALLOWED_USERS: merged.allowedUsers,
+    TELEGRAM_ALLOW_ALL_USERS: merged.allowAllUsers ? "true" : "",
+    TELEGRAM_GROUP_ALLOWED_CHATS: merged.groupAllowedChats || "*",
+    GATEWAY_ALLOW_ALL_USERS: merged.gatewayAllowAll ? "true" : "",
+    TELEGRAM_HOME_CHANNEL: merged.homeChannel,
+    TELEGRAM_HOME_CHANNEL_NAME: merged.homeChannelName,
+    TELEGRAM_CRON_THREAD_ID: merged.cronThreadId,
+    TELEGRAM_WEBHOOK_URL: merged.webhookUrl,
+    TELEGRAM_WEBHOOK_PORT: merged.webhookPort,
+    TELEGRAM_WEBHOOK_SECRET: merged.webhookSecret,
   };
 
   const lines = content.split(/\r?\n/);

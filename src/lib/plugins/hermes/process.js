@@ -8,9 +8,35 @@ import {
   HERMES_SERVICE_LOG,
 } from "./paths.js";
 import { findHermesBinary, HERMES_EXTENDED_PATH } from "./detect.js";
-import { getInstallInfo, isInstalling } from "./install.js";
+import { getInstallInfo, isInstalling, installHermes } from "./install.js";
 
 const STARTUP_TIMEOUT_MS = 5000;
+
+export async function updateHermes() {
+  const pid = getManagedPid();
+  const wasRunning = !!pid;
+  if (wasRunning) {
+    stopHermesService();
+    // Wait up to ~3s for process to stop
+    for (let i = 0; i < 30 && isPidAlive(pid); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  const installResult = await installHermes();
+
+  let restartResult = null;
+  if (wasRunning) {
+    restartResult = await startHermesService();
+  }
+
+  return {
+    success: true,
+    wasRunning,
+    restarted: !!restartResult,
+    installResult,
+  };
+}
 
 function ensureDir() {
   if (!fs.existsSync(HERMES_PLUGIN_DIR)) fs.mkdirSync(HERMES_PLUGIN_DIR, { recursive: true });

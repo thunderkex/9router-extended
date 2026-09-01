@@ -12,12 +12,25 @@
       "key": "level",
       "type": "enum",
       "options": [
-        {"value": "lite", "label": "Lite", "desc": "Build asked, name lazier option"},
-        {"value": "full", "label": "Full", "desc": "Ladder enforced: stdlib/native first"},
-        {"value": "ultra", "label": "Ultra", "desc": "YAGNI extremist, deletion first"}
+        {
+          "value": "lite",
+          "label": "Lite",
+          "desc": "Build asked, name lazier option"
+        },
+        {
+          "value": "full",
+          "label": "Full",
+          "desc": "Ladder enforced: stdlib/native first"
+        },
+        {
+          "value": "ultra",
+          "label": "Ultra",
+          "desc": "YAGNI extremist, deletion first"
+        }
       ],
       "default": "full",
       "legacy_key": "ponytailLevel"
     }
-  ]
+  ],
+  "version": "4.9.0"
 }

@@ -25,7 +25,8 @@ import { updateProviderCredentials, checkAndRefreshToken } from "../services/tok
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { getSkillManifests } from "@/lib/skillsRegistry.js";
 import { classifyPrompt, loadSkillPrompt, formatSkillInjection, ECC_ROUTER_BYPASS_HEADER } from "@/skills/autoRouter.js";
-import { getHermesSystemPromptBlock, appendHermesMemoryEntry } from "@/lib/plugins/hermes/memory.js";
+import { getHermesSystemPromptBlock, HERMES_MEMORY_BYPASS_HEADER } from "@/lib/plugins/hermes/memory.js";
+import { triggerHermesExtraction } from "@/lib/plugins/hermes/extraction.js";
 import { record as healthRecord } from "@/lib/routing/health.js";
 import { incrementFailover } from "@/lib/session/cache.js";
 
@@ -272,7 +273,13 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     const manifests = await getSkillManifests();
     const activeGenericPrompts = [];
     for (const skill of manifests) {
-      if (skill.hook === "system-prompt" && skill.id !== "caveman" && skill.id !== "ponytail" && skill.id !== "ecc-auto-skill-router") {
+      if (
+        skill.hook === "system-prompt" &&
+        skill.id !== "caveman" &&
+        skill.id !== "ponytail" &&
+        skill.id !== "ecc-auto-skill-router" &&
+        skill.id !== "hermes-toolkit"
+      ) {
         const enabledKey = skill.legacy_enabled_key || `${skill.id}Enabled`;
         const isEnabled = chatSettings[enabledKey] !== undefined ? !!chatSettings[enabledKey] : !!skill.default_enabled;
         if (isEnabled && skill.prompt_template) {
@@ -298,17 +305,24 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     }
 
     // Hermes Agent Memory Injection
-    const hermesToolkitEnabled = chatSettings["hermes-toolkitEnabled"] !== undefined
-      ? !!chatSettings["hermes-toolkitEnabled"]
-      : chatSettings.hermesToolkitEnabled !== undefined
-        ? !!chatSettings.hermesToolkitEnabled
-        : true;
+    const hermesBypass = clientRawRequest?.headers?.[HERMES_MEMORY_BYPASS_HEADER]?.toLowerCase() === "off" ||
+      clientRawRequest?.headers?.["x-9router-hermes-memory"]?.toLowerCase() === "off";
 
+    const hermesToolkitEnabled = !hermesBypass && (
+      chatSettings["hermes-toolkitEnabled"] !== undefined
+        ? !!chatSettings["hermes-toolkitEnabled"]
+        : chatSettings.hermesToolkitEnabled !== undefined
+          ? !!chatSettings.hermesToolkitEnabled
+          : true
+    );
+
+    let hermesMemoryInjected = false;
     if (hermesToolkitEnabled) {
       try {
         const hermesBlock = await getHermesSystemPromptBlock();
         if (hermesBlock) {
           activeGenericPrompts.push({ id: "hermes-toolkit", prompt: hermesBlock });
+          hermesMemoryInjected = true;
         }
       } catch (err) {
         log.warn("HERMES", `Hermes memory read failed (fail-open): ${err.message}`);
@@ -408,28 +422,33 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     if (result.success) {
       healthRecord(provider, { success: true, latencyMs: Date.now() - t0 });
 
-      // Auto-save learned context/memory asynchronously if user query has key facts or preferences
-      const autoSave = chatSettings.hermes_auto_save_memory !== undefined
-        ? !!chatSettings.hermes_auto_save_memory
-        : chatSettings.auto_save_memory !== undefined
-          ? !!chatSettings.auto_save_memory
-          : true;
+      // Add trace headers
+      try {
+        if (result.response && result.response.headers) {
+          result.response.headers.set("x-9r-hermes-memory", hermesMemoryInjected ? "hit" : "miss");
+        }
+      } catch {}
 
-      if (hermesToolkitEnabled && autoSave) {
-        Promise.resolve().then(async () => {
-          try {
-            const lastUserText = typeof body === "object" ? (
-              Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === "user").pop()?.content :
-              Array.isArray(body.input) ? body.input.filter((i) => i && i.role === "user").pop()?.content :
-              null
-            ) : null;
-            if (typeof lastUserText === "string" && lastUserText.length > 25 && /remember|preference|prefer|always|never|rule|convention/i.test(lastUserText)) {
-              await appendHermesMemoryEntry("user", `User note: ${lastUserText.slice(0, 300)}`);
-            }
-          } catch {
-            // fail-open
-          }
-        });
+      // Asynchronous smart memory extraction
+      if (hermesToolkitEnabled) {
+        const lastUserText = typeof body === "object" ? (
+          Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === "user").pop()?.content :
+          Array.isArray(body.input) ? body.input.filter((i) => i && i.role === "user").pop()?.content :
+          null
+        ) : null;
+
+        const sessionId = clientRawRequest?.headers?.["x-session-id"] || clientRawRequest?.headers?.["session-id"] || null;
+
+        if (typeof lastUserText === "string") {
+          triggerHermesExtraction({
+            text: lastUserText,
+            sessionId,
+            settings: chatSettings,
+            handleSingleModelChat: (b, m, raw, req, k) => handleSingleModelChat(b, m, raw, req, k),
+            apiKey,
+            log,
+          });
+        }
       }
 
       return result.response;

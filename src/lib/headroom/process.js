@@ -119,6 +119,32 @@ export async function startHeadroomProxy({ port = DEFAULT_PORT, codeAware = fals
   return { pid: child.pid, port: safePort, alreadyRunning: false };
 }
 
+export async function updateHeadroom({ extras = ["ml", "code"], port, codeAware, kompress } = {}) {
+  const pid = getManagedPid();
+  const wasRunning = !!pid;
+
+  if (wasRunning) {
+    stopHeadroomProxy();
+    for (let i = 0; i < 30 && isPidAlive(pid); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  const installResult = await installHeadroomExtras(extras);
+
+  let restartResult = null;
+  if (wasRunning) {
+    restartResult = await startHeadroomProxy({ port, codeAware, kompress });
+  }
+
+  return {
+    success: true,
+    wasRunning,
+    restarted: !!restartResult,
+    installResult,
+  };
+}
+
 export function stopHeadroomProxy() {
   const pid = getManagedPid();
   if (!pid) return { stopped: false, reason: "not_running" };

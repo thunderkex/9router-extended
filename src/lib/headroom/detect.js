@@ -62,8 +62,23 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0
 
 export const DEFAULT_HEADROOM_URL = process.env.HEADROOM_URL || "http://localhost:8787";
 
+const DETECT_CACHE_TTL_MS = 60000;
+let cachedHeadroomBinary = undefined;
+let lastHeadroomBinaryCheck = 0;
+
+export function clearHeadroomBinaryCache() {
+  cachedHeadroomBinary = undefined;
+  lastHeadroomBinaryCheck = 0;
+}
+
 // Detect whether the headroom CLI is installed and where its binary lives.
-export function findHeadroomBinary() {
+export function findHeadroomBinary(force = false) {
+  const now = Date.now();
+  if (!force && cachedHeadroomBinary !== undefined && (now - lastHeadroomBinaryCheck < DETECT_CACHE_TTL_MS)) {
+    return cachedHeadroomBinary;
+  }
+
+  let resolved = null;
   try {
     const out = execSync(`${WHICH_CMD} headroom`, {
       stdio: ["ignore", "pipe", "ignore"],
@@ -71,10 +86,14 @@ export function findHeadroomBinary() {
       env: { ...process.env, PATH: EXTENDED_PATH },
     }).toString().trim();
     // Windows `where` may return multiple lines — take the first.
-    return out ? out.split(/\r?\n/)[0].trim() : null;
+    resolved = out ? out.split(/\r?\n/)[0].trim() : null;
   } catch {
-    return null;
+    resolved = null;
   }
+
+  cachedHeadroomBinary = resolved;
+  lastHeadroomBinaryCheck = now;
+  return resolved;
 }
 
 // Find a Python interpreter >= 3.10 (headroom-ai requires it). Returns null if none.

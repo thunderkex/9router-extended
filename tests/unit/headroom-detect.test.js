@@ -16,10 +16,11 @@ vi.mock("child_process", () => ({
   execFileSync: mocks.execFileSync,
 }));
 
-import { findPython310, getHeadroomStatus, getInstalledHeadroomExtras, isLoopbackHeadroomUrl, autoDetectHeadroomPort } from "../../src/lib/headroom/detect.js";
+import { findPython310, getHeadroomStatus, getInstalledHeadroomExtras, isLoopbackHeadroomUrl, autoDetectHeadroomPort, clearHeadroomBinaryCache } from "../../src/lib/headroom/detect.js";
 
 afterEach(() => {
   vi.clearAllMocks();
+  clearHeadroomBinaryCache();
 });
 
 describe("headroom detect", () => {

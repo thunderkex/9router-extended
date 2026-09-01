@@ -10,7 +10,7 @@ const BIN_DIR = path.join(DATA_DIR, "bin");
 const BINARY_NAME = "cloudflared";
 const IS_WINDOWS = os.platform() === "win32";
 const BIN_NAME = IS_WINDOWS ? `${BINARY_NAME}.exe` : BINARY_NAME;
-const BIN_PATH = path.join(BIN_DIR, BIN_NAME);
+export const BIN_PATH = path.join(BIN_DIR, BIN_NAME);
 const POWERSHELL_HIDDEN_COMMAND = "powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command";
 const DEFAULT_QUICK_TUNNEL_PROTOCOL = "http2";
 const QUICK_TUNNEL_PROTOCOLS = new Set(["http2", "quic", "auto"]);

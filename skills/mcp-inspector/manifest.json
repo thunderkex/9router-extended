@@ -7,5 +7,7 @@
   "default_enabled": false,
   "install_command": "npm install -g @modelcontextprotocol/inspector",
   "uninstall_command": "npm uninstall -g @modelcontextprotocol/inspector",
-  "source": "https://github.com/modelcontextprotocol/inspector"
+  "source": "https://github.com/modelcontextprotocol/inspector",
+  "update_command": "npm install -g @modelcontextprotocol/inspector@latest",
+  "version": "2.3.0"
 }

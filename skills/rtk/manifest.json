@@ -6,5 +6,6 @@
   "hook": "pre-request",
   "default_enabled": true,
   "legacy_enabled_key": "rtkEnabled",
-  "source": "https://github.com/rtk-ai/rtk"
+  "source": "https://github.com/rtk-ai/rtk",
+  "version": "0.46.0"
 }

@@ -1,0 +1,22 @@
+# Commit Message Rules (Human Conventional Commits)
+
+Format commit message:
+`nama_file: tipe subjek singkat`
+
+Gunakan salah satu tipe berikut sesuai perubahan yang dilakukan:
+- `feat`: Menambah fitur baru
+- `fix`: Memperbaiki bug
+- `docs`: Perubahan dokumentasi saja
+- `style`: Perubahan format/gaya kode (spasi, indentasi, dll), tanpa mengubah logika
+- `refactor`: Merapikan/restrukturisasi kode tanpa mengubah perilaku
+- `perf`: Perubahan yang meningkatkan performa
+- `test`: Menambah atau memperbaiki test
+- `build`: Perubahan pada sistem build atau dependency
+- `ci`: Perubahan konfigurasi CI/CD
+- `chore`: Pekerjaan rutin lain yang tidak masuk kategori di atas
+- `revert`: Membatalkan commit sebelumnya
+
+Contoh:
+auth.py: feat tambah validasi token JWT
+readme.md: docs perbarui panduan instalasi
+utils.js: fix perbaiki bug pembulatan angka

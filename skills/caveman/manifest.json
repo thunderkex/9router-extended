@@ -12,15 +12,43 @@
       "key": "level",
       "type": "enum",
       "options": [
-        {"value": "lite", "label": "Lite", "desc": "Drop filler, keep grammar"},
-        {"value": "full", "label": "Full", "desc": "Drop articles, fragments OK"},
-        {"value": "ultra", "label": "Ultra", "desc": "Telegraphic, max compression"},
-        {"value": "wenyan-lite", "label": "文 Lite", "desc": "Classical Chinese, light compression", "wenyan": true},
-        {"value": "wenyan", "label": "文 Full", "desc": "Maximum 文言文, 80-90% reduction", "wenyan": true},
-        {"value": "wenyan-ultra", "label": "文 Ultra", "desc": "Extreme classical compression", "wenyan": true}
+        {
+          "value": "lite",
+          "label": "Lite",
+          "desc": "Drop filler, keep grammar"
+        },
+        {
+          "value": "full",
+          "label": "Full",
+          "desc": "Drop articles, fragments OK"
+        },
+        {
+          "value": "ultra",
+          "label": "Ultra",
+          "desc": "Telegraphic, max compression"
+        },
+        {
+          "value": "wenyan-lite",
+          "label": "文 Lite",
+          "desc": "Classical Chinese, light compression",
+          "wenyan": true
+        },
+        {
+          "value": "wenyan",
+          "label": "文 Full",
+          "desc": "Maximum 文言文, 80-90% reduction",
+          "wenyan": true
+        },
+        {
+          "value": "wenyan-ultra",
+          "label": "文 Ultra",
+          "desc": "Extreme classical compression",
+          "wenyan": true
+        }
       ],
       "default": "full",
       "legacy_key": "cavemanLevel"
     }
-  ]
+  ],
+  "version": "2.4.0"
 }

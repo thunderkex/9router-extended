@@ -7,5 +7,7 @@
   "default_enabled": false,
   "install_command": "uv tool install graphifyy && graphify install",
   "uninstall_command": "graphify uninstall",
-  "source": "https://github.com/Graphify-Labs/graphify"
+  "source": "https://github.com/Graphify-Labs/graphify",
+  "update_command": "uv tool upgrade graphifyy",
+  "version": "0.9.42"
 }

@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Card, Button, Input, Modal, Toggle, ConfirmModal, ConfigSlider } from "@/shared/components";
+import { Card, Button, Input, Modal, Toggle, ConfirmModal, ConfigSlider, Badge } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { getCurrentLocale, onLocaleChange } from "@/i18n/runtime";
 import {
@@ -66,6 +66,12 @@ export default function TokenSaverClient() {
   const [settings, setSettings] = useState({});
   const [skills, setSkills] = useState([]);
   const [installingSkill, setInstallingSkill] = useState(null);
+  const [headroomUpdateInfo, setHeadroomUpdateInfo] = useState(null);
+  const [headroomUpdating, setHeadroomUpdating] = useState(false);
+  const [pxpipeUpdateInfo, setPxpipeUpdateInfo] = useState(null);
+  const [pxpipeUpdating, setPxpipeUpdating] = useState(false);
+  const [skillsUpdates, setSkillsUpdates] = useState({});
+  const [syncingSkill, setSyncingSkill] = useState(null);
 
   const { copied, copy } = useCopyToClipboard();
 
@@ -505,13 +511,106 @@ export default function TokenSaverClient() {
         if (res.ok) {
           const data = await res.json();
           setSkills(data);
+
+          // Check updates for prompt/rule skills on Token Saver page
+          const list = ["caveman", "ponytail", "rtk", "watermarks-remover"];
+          for (const id of list) {
+            fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(id)}`)
+              .then((r) => r.ok ? r.json() : null)
+              .then((up) => {
+                if (up) setSkillsUpdates((prev) => ({ ...prev, [id]: up }));
+              })
+              .catch(() => {});
+          }
         }
       } catch {}
     };
 
     loadSettings();
     loadSkills();
+    checkHeadroomUpdate();
+    checkPxpipeUpdate();
   }, [refreshHeadroomStatus, refreshPxpipeStatus, runPxpipeHealth]);
+
+  const checkHeadroomUpdate = async () => {
+    try {
+      const res = await fetch("/api/plugins/update-check?plugin=headroom");
+      if (res.ok) {
+        const data = await res.json();
+        setHeadroomUpdateInfo(data);
+      }
+    } catch {}
+  };
+
+  const handleHeadroomUpdate = async () => {
+    if (!headroomStatus.installed || headroomUpdating) return;
+    setHeadroomUpdating(true);
+    try {
+      const res = await fetch("/api/headroom/update", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await refreshHeadroomStatus();
+        await checkHeadroomUpdate();
+      } else {
+        alert(data.error || "Headroom update failed");
+      }
+    } catch (e) {
+      alert("Headroom update error: " + e.message);
+    } finally {
+      setHeadroomUpdating(false);
+    }
+  };
+
+  const checkPxpipeUpdate = async () => {
+    try {
+      const res = await fetch("/api/plugins/update-check?plugin=pxpipe");
+      if (res.ok) {
+        const data = await res.json();
+        setPxpipeUpdateInfo(data);
+      }
+    } catch {}
+  };
+
+  const handleSyncPromptSkill = async (skillId) => {
+    setSyncingSkill(skillId);
+    try {
+      const res = await fetch("/api/skills/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: skillId, action: "update" }),
+      });
+      if (res.ok) {
+        const upRes = await fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(skillId)}`);
+        if (upRes.ok) {
+          const up = await upRes.json();
+          setSkillsUpdates((prev) => ({ ...prev, [skillId]: up }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to sync skill:", e);
+    } finally {
+      setSyncingSkill(null);
+    }
+  };
+
+  const handlePxpipeUpdate = async () => {
+    if (!pxpipeStatus.installed || pxpipeUpdating) return;
+    setPxpipeUpdating(true);
+    try {
+      const res = await fetch("/api/pxpipe/update", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await refreshPxpipeStatus();
+        await checkPxpipeUpdate();
+      } else {
+        alert(data.error || "PXPIPE update failed");
+      }
+    } catch (e) {
+      alert("PXPIPE update error: " + e.message);
+    } finally {
+      setPxpipeUpdating(false);
+    }
+  };
 
   const handleSkillToggle = (skill, value) => {
     const key = skill.legacy_enabled_key || `${skill.id}Enabled`;
@@ -562,6 +661,7 @@ export default function TokenSaverClient() {
       name: "RTK",
       description: "Compress tool output (git/grep/ls/tree/logs → 60-90% fewer input tokens)",
       source: "https://github.com/rtk-ai/rtk",
+      version: "0.46.0",
       default_enabled: true,
       legacy_enabled_key: "rtkEnabled",
     },
@@ -570,6 +670,7 @@ export default function TokenSaverClient() {
       name: "Headroom",
       description: "Compress context via external /v1/compress proxy before routing to the model",
       source: "https://github.com/chopratejas/headroom",
+      version: "0.1.0",
       default_enabled: false,
       legacy_enabled_key: "headroomEnabled",
       config_schema: [
@@ -587,6 +688,7 @@ export default function TokenSaverClient() {
       name: "Caveman",
       description: "Terse-style system prompt → ~65% fewer output tokens (up to 87%)",
       source: "https://github.com/caveman-ai/caveman",
+      version: "2.4.0",
       default_enabled: false,
       legacy_enabled_key: "cavemanEnabled",
       config_schema: [
@@ -608,6 +710,7 @@ export default function TokenSaverClient() {
       name: "Ponytail",
       description: "Bias the model toward minimal code: YAGNI, reuse stdlib, deletion over addition",
       source: "https://github.com/ponytail-ai/ponytail",
+      version: "4.9.0",
       default_enabled: false,
       legacy_enabled_key: "ponytailEnabled",
       config_schema: [
@@ -629,6 +732,7 @@ export default function TokenSaverClient() {
       name: "Watermarks Remover",
       description: "Strip AI provenance marks (invisible Unicode, C2PA) and AI transition clichés from outputs.",
       source: "https://github.com/9router/watermarks-remover",
+      version: "0.6.0",
       default_enabled: false,
       legacy_enabled_key: "watermarksRemoverEnabled",
     },
@@ -699,11 +803,64 @@ export default function TokenSaverClient() {
                       {skill.name}{" "}
                       <a href={skill.source} target="_blank" rel="noreferrer" className="text-xs font-normal text-primary underline hover:opacity-80">(Source)</a>
                     </p>
+                    {(() => {
+                      if (skill.id === "headroom") {
+                        const ver = headroomUpdateInfo?.currentVersion || headroomExtras?.version || skill.version;
+                        return ver ? (
+                          <Badge variant="success" size="sm">
+                            v{ver.replace(/^v/, "")}
+                          </Badge>
+                        ) : null;
+                      }
+                      const up = skillsUpdates[skill.id];
+                      const currentVer = up?.currentVersion || skill.version;
+                      const hasUpdate = up?.hasUpdate;
+                      const latestVer = up?.latestVersion;
+
+                      if (!currentVer) return null;
+                      return (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="success" size="sm">
+                            v{currentVer.replace(/^v/, "")}
+                          </Badge>
+                          {hasUpdate && (
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="warning" size="sm" className="animate-pulse">
+                                v{latestVer} available
+                              </Badge>
+                              <button
+                                type="button"
+                                onClick={() => handleSyncPromptSkill(skill.id)}
+                                disabled={syncingSkill === skill.id}
+                                className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                              >
+                                {syncingSkill === skill.id ? "Syncing…" : "Sync"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {skill.id === "headroom" && (
                       <>
                         <span className={`text-xs px-2 py-0.5 rounded font-medium ${headroomRunning ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
                           {headroomStatusLabel}
                         </span>
+                        {headroomStatus.installed && headroomUpdateInfo?.updateAvailable && (
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="warning" size="sm" className="animate-pulse">
+                              Update: v{headroomUpdateInfo.latestVersion}
+                            </Badge>
+                            <button
+                              type="button"
+                              onClick={handleHeadroomUpdate}
+                              disabled={headroomUpdating}
+                              className="px-2 py-0.5 rounded text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                            >
+                              {headroomUpdating ? "Updating…" : "Update"}
+                            </button>
+                          </div>
+                        )}
                         {!headroomRunning && headroomStatus.python && !headroomStatus.installed && (
                           <button
                             type="button"
@@ -1002,10 +1159,27 @@ export default function TokenSaverClient() {
           </p>
           <div className="flex items-center justify-between text-sm">
             <span>Status</span>
-            <span className={pxpipeHealthy || pxpipeStatus.running ? "text-success" : "text-warning"}>
-              {pxpipeStatusLabel}
-              {pxpipeStatus.version ? ` · v${pxpipeStatus.version}` : ""}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={pxpipeHealthy || pxpipeStatus.running ? "text-success" : "text-warning"}>
+                {pxpipeStatusLabel}
+                {pxpipeStatus.version ? ` · v${pxpipeStatus.version}` : ""}
+              </span>
+              {pxpipeStatus.installed && pxpipeUpdateInfo?.updateAvailable && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-mono font-medium">
+                    Update: v{pxpipeUpdateInfo.latestVersion}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handlePxpipeUpdate}
+                    disabled={pxpipeUpdating}
+                    className="px-2 py-0.5 rounded text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {pxpipeUpdating ? "Updating…" : "Update"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           {pxpipeHealth?.checks?.length > 0 && (
             <div className="flex flex-col gap-1 rounded border border-border p-3">

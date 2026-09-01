@@ -30,7 +30,22 @@ const EXTRA_BINS = IS_WIN
 
 export const HERMES_EXTENDED_PATH = [...EXTRA_BINS, process.env.PATH || ""].filter(Boolean).join(path.delimiter);
 
-export function findHermesBinary() {
+const DETECT_CACHE_TTL_MS = 60000;
+let cachedHermesBinary = undefined;
+let lastHermesBinaryCheck = 0;
+
+export function clearHermesBinaryCache() {
+  cachedHermesBinary = undefined;
+  lastHermesBinaryCheck = 0;
+}
+
+export function findHermesBinary(force = false) {
+  const now = Date.now();
+  if (!force && cachedHermesBinary !== undefined && (now - lastHermesBinaryCheck < DETECT_CACHE_TTL_MS)) {
+    return cachedHermesBinary;
+  }
+
+  let resolved = null;
   try {
     const out = execSync(`${WHICH_CMD} hermes`, {
       stdio: ["ignore", "pipe", "ignore"],
@@ -39,24 +54,31 @@ export function findHermesBinary() {
     }).toString().trim();
     if (out) {
       const firstLine = out.split(/\r?\n/)[0].trim();
-      if (firstLine && fs.existsSync(firstLine)) return firstLine;
+      if (firstLine && fs.existsSync(firstLine)) resolved = firstLine;
     }
   } catch { /* ignore */ }
 
-  const directCandidates = [
-    path.join(getHermesHomeDir(), "bin", IS_WIN ? "hermes.exe" : "hermes"),
-    path.join(getHermesHomeDir(), "bin", IS_WIN ? "hermes.bat" : "hermes"),
-    path.join(getHermesHomeDir(), "bin", IS_WIN ? "hermes.cmd" : "hermes"),
-    path.join(os.homedir(), ".local", "bin", IS_WIN ? "hermes.exe" : "hermes"),
-  ];
+  if (!resolved) {
+    const directCandidates = [
+      path.join(getHermesHomeDir(), "bin", IS_WIN ? "hermes.exe" : "hermes"),
+      path.join(getHermesHomeDir(), "bin", IS_WIN ? "hermes.bat" : "hermes"),
+      path.join(getHermesHomeDir(), "bin", IS_WIN ? "hermes.cmd" : "hermes"),
+      path.join(os.homedir(), ".local", "bin", IS_WIN ? "hermes.exe" : "hermes"),
+    ];
 
-  for (const candidate of directCandidates) {
-    try {
-      if (fs.existsSync(candidate)) return candidate;
-    } catch { /* ignore */ }
+    for (const candidate of directCandidates) {
+      try {
+        if (fs.existsSync(candidate)) {
+          resolved = candidate;
+          break;
+        }
+      } catch { /* ignore */ }
+    }
   }
 
-  return null;
+  cachedHermesBinary = resolved;
+  lastHermesBinaryCheck = now;
+  return resolved;
 }
 
 export function getHermesVersion(binaryPath = null) {
@@ -68,6 +90,11 @@ export function getHermesVersion(binaryPath = null) {
       windowsHide: true,
       env: { ...process.env, PATH: HERMES_EXTENDED_PATH },
     }).toString().trim();
+    
+    // Check for CalVer date pattern in parentheses e.g. "Hermes Agent v0.21.0 (2026.8.31)"
+    const calverMatch = out.match(/\((202\d\.\d+\.\d+)\)/);
+    if (calverMatch) return calverMatch[1];
+
     const match = out.match(/(\d+\.\d+(\.\d+)?(-[a-zA-Z0-9.]+)?)/);
     return match ? match[1] : (out.split(/\r?\n/)[0].trim() || null);
   } catch {

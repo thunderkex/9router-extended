@@ -1,5 +1,26 @@
-import { getInstallInfo, isInstalling, findNpm } from "./install.js";
-import { getLoadedInfo, loadPxpipe, selfTest } from "./loader.js";
+import { getInstallInfo, isInstalling, findNpm, installPxpipe } from "./install.js";
+import { getLoadedInfo, loadPxpipe, unloadPxpipe, selfTest } from "./loader.js";
+
+export async function updatePxpipe() {
+  const wasLoaded = getLoadedInfo().loaded;
+  if (wasLoaded) {
+    unloadPxpipe();
+  }
+
+  const installResult = await installPxpipe();
+
+  let reloadResult = null;
+  if (wasLoaded) {
+    reloadResult = await loadPxpipe();
+  }
+
+  return {
+    success: true,
+    wasLoaded,
+    reloaded: !!reloadResult,
+    installResult,
+  };
+}
 
 // Aggregate status for the Token Saver card and /api/pxpipe/status.
 // "running" in library mode = module loaded into this process.

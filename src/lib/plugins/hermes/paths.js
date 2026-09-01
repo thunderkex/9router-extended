@@ -16,15 +16,6 @@ function resolveHermesHomeDir() {
   return dotHermes;
 }
 
-export const HERMES_HOME_DIR = resolveHermesHomeDir();
-export const HERMES_CONFIG_PATH = path.join(HERMES_HOME_DIR, "config.yaml");
-export const HERMES_ENV_PATH = path.join(HERMES_HOME_DIR, ".env");
-
-export const HERMES_PLUGIN_DIR = path.join(DATA_DIR, "plugins", "hermes");
-export const HERMES_PID_FILE = path.join(HERMES_PLUGIN_DIR, "service.pid");
-export const HERMES_SERVICE_LOG = path.join(HERMES_PLUGIN_DIR, "service.log");
-export const HERMES_INSTALL_LOG = path.join(HERMES_PLUGIN_DIR, "install.log");
-
 export function getHermesHomeDir() {
   return resolveHermesHomeDir();
 }
@@ -38,3 +29,12 @@ export function getHermesEnvPath() {
   const home = resolveHermesHomeDir();
   return path.join(home, ".env");
 }
+
+export const HERMES_HOME_DIR = resolveHermesHomeDir();
+export const HERMES_CONFIG_PATH = path.join(HERMES_HOME_DIR, "config.yaml");
+export const HERMES_ENV_PATH = path.join(HERMES_HOME_DIR, ".env");
+
+export const HERMES_PLUGIN_DIR = path.join(DATA_DIR, "plugins", "hermes");
+export const HERMES_PID_FILE = path.join(HERMES_PLUGIN_DIR, "service.pid");
+export const HERMES_SERVICE_LOG = path.join(HERMES_PLUGIN_DIR, "service.log");
+export const HERMES_INSTALL_LOG = path.join(HERMES_PLUGIN_DIR, "install.log");

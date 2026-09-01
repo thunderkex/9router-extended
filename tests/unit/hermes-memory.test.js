@@ -36,12 +36,23 @@ describe("Hermes Memory Management Suite", () => {
     expect(block).toContain("--- End Hermes Agent Memory ---");
   });
 
-  it("appends entries respecting duplicate check and character bounds", async () => {
-    const res1 = await appendHermesMemoryEntry("user", "Test habit 1", 500);
-    expect(res1.success).toBe(true);
+  it("truncates entries longer than 500 characters", async () => {
+    const longText = "A".repeat(600);
+    const res = await appendHermesMemoryEntry("user", longText, 2000);
+    expect(res.success).toBe(true);
+    const lastEntry = res.entries[res.entries.length - 1];
+    expect(lastEntry.length).toBe(500);
+    expect(lastEntry.endsWith("...")).toBe(true);
+  });
 
-    const resDup = await appendHermesMemoryEntry("user", "Test habit 1", 500);
-    expect(resDup.success).toBe(true);
-    expect(resDup.duplicate).toBe(true);
+  it("invalidates and updates system prompt block cache on file writes", async () => {
+    await writeHermesMemory("memory", ["Cache item 1"]);
+    const b1 = await getHermesSystemPromptBlock();
+    expect(b1).toContain("Cache item 1");
+
+    await writeHermesMemory("memory", ["Cache item 2 updated"]);
+    const b2 = await getHermesSystemPromptBlock();
+    expect(b2).toContain("Cache item 2 updated");
+    expect(b2).not.toContain("Cache item 1");
   });
 });

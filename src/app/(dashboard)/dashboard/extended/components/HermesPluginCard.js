@@ -21,6 +21,12 @@ export default function HermesPluginCard() {
   const [logType, setLogType] = useState("service"); // 'service' | 'install'
   const [logsText, setLogsText] = useState("");
   const [logsLoading, setLogsLoading] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState({ hasUpdate: false, latestVersion: null });
+  const [updating, setUpdating] = useState(false);
+  const [launchingDashboard, setLaunchingDashboard] = useState(false);
+  const [dashboardStatus, setDashboardStatus] = useState({ installed: false, running: false, url: "http://127.0.0.1:9119" });
+  const [webUIMode, setWebUIMode] = useState("dashboard"); // 'dashboard' (Full Web UI) | 'serve' (Headless JSON-RPC / API only)
+  const [showWebUIModal, setShowWebUIModal] = useState(false);
 
   // Telegram settings state
   const [showTelegramModal, setShowTelegramModal] = useState(false);
@@ -100,13 +106,62 @@ export default function HermesPluginCard() {
     }
   }, []);
 
+  const checkUpdate = useCallback(async () => {
+    try {
+      const res = await fetch("/api/plugins/update-check?plugin=hermes");
+      if (res.ok) {
+        const data = await res.json();
+        setUpdateInfo(data);
+      }
+    } catch (e) {
+      console.error("Failed to check Hermes update:", e);
+    }
+  }, []);
+
+  const handleUpdate = async () => {
+    setUpdating(true);
+    setActionInProgress(true);
+    setErrorMsg(null);
+    setLogType("install");
+    setShowLogsModal(true);
+    setLogsText("Updating Hermes Agent...\n");
+
+    try {
+      const res = await fetch("/api/plugins/hermes/update", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSuccessMsg("Hermes Agent updated successfully.");
+        fetchStatus();
+        checkUpdate();
+      } else {
+        setErrorMsg(data.error || "Update failed. Check install log.");
+      }
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setUpdating(false);
+      setActionInProgress(false);
+    }
+  };
+
+  const fetchDashboardStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/plugins/hermes/dashboard");
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardStatus(data);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [statusRes, tgRes] = await Promise.all([
+        const [statusRes, tgRes, dashRes] = await Promise.all([
           fetch("/api/plugins/hermes/status"),
           fetch("/api/plugins/hermes/telegram"),
+          fetch("/api/plugins/hermes/dashboard"),
         ]);
         if (statusRes.ok && mounted) {
           const data = await statusRes.json();
@@ -116,6 +171,11 @@ export default function HermesPluginCard() {
           const tgData = await tgRes.json();
           setTelegramConfig(tgData);
         }
+        if (dashRes.ok && mounted) {
+          const dashData = await dashRes.json();
+          setDashboardStatus(dashData);
+        }
+        checkUpdate();
       } catch (e) {
         console.error("Failed to fetch Hermes status / config:", e);
       } finally {
@@ -128,6 +188,12 @@ export default function HermesPluginCard() {
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && mounted) setStatus(data);
+        })
+        .catch(() => {});
+      fetch("/api/plugins/hermes/dashboard")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && mounted) setDashboardStatus(data);
         })
         .catch(() => {});
     }, 5000);
@@ -257,6 +323,57 @@ export default function HermesPluginCard() {
     }
   };
 
+  const handleOpenDashboard = async (mode = webUIMode) => {
+    setLaunchingDashboard(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/plugins/hermes/dashboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = await res.json();
+      fetchDashboardStatus();
+      if (mode === "dashboard") {
+        const targetUrl = data.url || "http://127.0.0.1:9119";
+        window.open(targetUrl, "_blank", "noopener,noreferrer");
+      } else {
+        setSuccessMsg("Hermes headless backend service (serve mode) is running.");
+      }
+    } catch (e) {
+      if (mode === "dashboard") {
+        window.open("http://127.0.0.1:9119", "_blank", "noopener,noreferrer");
+      } else {
+        setErrorMsg(e.message);
+      }
+    } finally {
+      setLaunchingDashboard(false);
+    }
+  };
+
+  const handleStopDashboard = async () => {
+    setLaunchingDashboard(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/plugins/hermes/dashboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg("Hermes web UI / backend server stopped.");
+        fetchDashboardStatus();
+      } else {
+        setErrorMsg(data.error || "Failed to stop Hermes dashboard/server");
+      }
+    } catch (e) {
+      setErrorMsg(e.message);
+    } finally {
+      setLaunchingDashboard(false);
+    }
+  };
+
   const openLogs = async (type = "service") => {
     setLogType(type);
     setShowLogsModal(true);
@@ -310,6 +427,11 @@ export default function HermesPluginCard() {
                 v{status.version}
               </span>
             )}
+            {updateInfo?.hasUpdate && (
+              <Badge variant="primary" size="sm">
+                Update available: v{updateInfo.latestVersion}
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-text-muted leading-relaxed">
             Run NousResearch Hermes Agent as a managed local background process with automated lifecycle, PID tracking, and log output.
@@ -319,6 +441,33 @@ export default function HermesPluginCard() {
         <div className="flex items-center gap-2 flex-wrap">
           {status.installed ? (
             <>
+              <div className="flex items-center rounded-lg border border-border bg-surface-2/60 p-0.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOpenDashboard(webUIMode)}
+                  disabled={actionInProgress || launchingDashboard}
+                  className="flex items-center gap-1.5 border-0 bg-transparent shadow-none"
+                  title="Open Hermes Agent Web Dashboard (http://127.0.0.1:9119)"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {launchingDashboard ? "progress_activity" : "dashboard"}
+                  </span>
+                  <span>{launchingDashboard ? "Opening..." : "Dashboard"}</span>
+                  {dashboardStatus.running && (
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setShowWebUIModal(true)}
+                  className="px-1.5 text-text-muted hover:text-text-main h-7 rounded-md"
+                  title="Configure Hermes Web UI / Headless Backend Options"
+                >
+                  <span className="material-symbols-outlined text-[15px]">tune</span>
+                </Button>
+              </div>
               {status.running ? (
                 <>
                   <Button
@@ -379,6 +528,18 @@ export default function HermesPluginCard() {
                     <span>Start</span>
                   </Button>
                 </>
+              )}
+              {updateInfo?.hasUpdate && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleUpdate}
+                  disabled={actionInProgress || updating}
+                  className="flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">update</span>
+                  <span>{updating ? "Updating..." : "Update"}</span>
+                </Button>
               )}
               <Button
                 variant="outline"
@@ -614,6 +775,141 @@ export default function HermesPluginCard() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Hermes Web UI & Headless Backend Settings Modal */}
+      {showWebUIModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="w-full max-w-lg rounded-2xl bg-surface border border-border shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-surface-2/40">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[20px]">tune</span>
+                <h3 className="text-sm font-semibold text-text-main">
+                  Hermes Web UI & Backend Mode
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowWebUIModal(false)}
+                className="p-1 rounded-md text-text-muted hover:text-text-main"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="space-y-3">
+                <div
+                  onClick={() => setWebUIMode("dashboard")}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    webUIMode === "dashboard"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                      : "border-border bg-surface-2/60 hover:border-border-hover"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-text-main">
+                          Full Web UI Dashboard (hermes dashboard)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 font-medium">
+                          Enabled UI
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-text-muted leading-relaxed">
+                        Serves both the browser UI and backend API on port <span className="font-mono text-primary">9119</span>. Ideal for managing sessions, tools, and visual configurations.
+                      </p>
+                    </div>
+                    <input
+                      type="radio"
+                      name="webUIMode"
+                      checked={webUIMode === "dashboard"}
+                      onChange={() => setWebUIMode("dashboard")}
+                      className="mt-1 text-primary focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setWebUIMode("serve")}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    webUIMode === "serve"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                      : "border-border bg-surface-2/60 hover:border-border-hover"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-text-main">
+                          Headless Backend Server (hermes serve)
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-3 text-text-muted font-medium">
+                          UI Disabled
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-text-muted leading-relaxed">
+                        Runs lightweight JSON-RPC / WebSocket gateway without frontend assets. Disables browser UI to conserve memory and background CPU cycles.
+                      </p>
+                    </div>
+                    <input
+                      type="radio"
+                      name="webUIMode"
+                      checked={webUIMode === "serve"}
+                      onChange={() => setWebUIMode("serve")}
+                      className="mt-1 text-primary focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface-2/80 border border-border/50 text-xs flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`size-2 rounded-full ${dashboardStatus.running ? "bg-emerald-500 animate-pulse" : "bg-text-muted/40"}`} />
+                  <span className="text-text-muted">
+                    Port 9119 Server Status: <strong className="text-text-main">{dashboardStatus.running ? "Active" : "Stopped"}</strong>
+                  </span>
+                </div>
+                {dashboardStatus.running && (
+                  <Button
+                    variant="destructive"
+                    size="xs"
+                    onClick={handleStopDashboard}
+                    disabled={launchingDashboard}
+                  >
+                    Stop Web Server
+                  </Button>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-3">
+                <span className="text-xs text-text-muted font-mono">http://127.0.0.1:9119</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowWebUIModal(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setShowWebUIModal(false);
+                      handleOpenDashboard(webUIMode);
+                    }}
+                    disabled={launchingDashboard}
+                    className="flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+                    <span>Launch & Open</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

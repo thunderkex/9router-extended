@@ -49,6 +49,7 @@ const g = global.__appSingleton ??= {
   tailscaleAutoResumed: false,
   headroomAutoResumed: false,
   hermesAutoResumed: false,
+  lastAutoUpdateAt: {},
 };
 
 export async function initializeApp() {
@@ -302,13 +303,172 @@ async function safeRestartTailscale(reason) {
   }
 }
 
-// ─── Watchdog: 60s tick check both services ──────────────────────────────────
+// ─── Watchdog: 60s tick check all monitored services ─────────────────────────
+
+async function safeRestartHeadroom(reason) {
+  try {
+    const settings = await getSettings();
+    if (!settings.headroomEnabled || settings.headroomAutoStart === false) return;
+    const { findHeadroomBinary, isLoopbackHeadroomUrl, DEFAULT_HEADROOM_URL } = await import("@/lib/headroom/detect.js");
+    const { getManagedPid, isHeadroomRunning } = await import("@/lib/headroom/process.js");
+    const binary = findHeadroomBinary();
+    if (!binary) return;
+    const url = settings.headroomUrl || DEFAULT_HEADROOM_URL;
+    if (!isLoopbackHeadroomUrl(url)) return;
+
+    const running = await isHeadroomRunning(url);
+    if (!running && !getManagedPid()) {
+      console.log(`[Headroom] safeRestart (${reason}) — process died, restarting...`);
+      await autoStartHeadroom(settings);
+    }
+  } catch (e) {
+    console.log("[Headroom] safeRestart failed:", e.message);
+  }
+}
+
+async function safeRestartHermes(reason) {
+  try {
+    const settings = await getSettings();
+    if (settings.hermesServiceAutoStart === false) return;
+    const { findHermesBinary } = await import("@/lib/plugins/hermes/detect.js");
+    const { getManagedPid } = await import("@/lib/plugins/hermes/process.js");
+    const binary = findHermesBinary();
+    if (!binary) return;
+
+    if (!getManagedPid()) {
+      console.log(`[Hermes] safeRestart (${reason}) — process died, restarting...`);
+      await autoStartHermes(settings);
+    }
+  } catch (e) {
+    console.log("[Hermes] safeRestart failed:", e.message);
+  }
+}
+
+const AUTO_UPDATE_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+async function checkPluginAutoUpdates() {
+  try {
+    const settings = await getSettings();
+    const now = Date.now();
+
+    // Headroom auto-update
+    if (settings.headroomAutoUpdate) {
+      const last = g.lastAutoUpdateAt["headroom"] || 0;
+      if (now - last > AUTO_UPDATE_COOLDOWN_MS) {
+        g.lastAutoUpdateAt["headroom"] = now;
+        const { checkForUpdate, fetchPyPiLatest } = await import("@/lib/updateCheck.js");
+        const { getHeadroomVersion } = await import("@/lib/headroom/detect.js");
+        const cur = await getHeadroomVersion();
+        if (cur) {
+          const up = await checkForUpdate("headroom", cur, () => fetchPyPiLatest("headroom-ai"));
+          if (up.updateAvailable) {
+            console.log(`[AutoUpdate] Updating headroom ${cur} -> ${up.latestVersion}...`);
+            const { updateHeadroom } = await import("@/lib/headroom/process.js");
+            await updateHeadroom();
+          }
+        }
+      }
+    }
+
+    // Hermes auto-update
+    if (settings.hermesAutoUpdate) {
+      const last = g.lastAutoUpdateAt["hermes"] || 0;
+      if (now - last > AUTO_UPDATE_COOLDOWN_MS) {
+        g.lastAutoUpdateAt["hermes"] = now;
+        const { checkForUpdate, fetchGitHubReleaseLatest } = await import("@/lib/updateCheck.js");
+        const { getHermesVersion } = await import("@/lib/plugins/hermes/detect.js");
+        const cur = await getHermesVersion();
+        if (cur) {
+          const up = await checkForUpdate("hermes", cur, () => fetchGitHubReleaseLatest("NousResearch/hermes-agent"));
+          if (up.hasUpdate) {
+            console.log(`[AutoUpdate] Updating hermes ${cur} -> ${up.latestVersion}...`);
+            const { updateHermes } = await import("@/lib/plugins/hermes/process.js");
+            await updateHermes();
+          }
+        }
+      }
+    }
+
+    // Pxpipe auto-update
+    if (settings.pxpipeAutoUpdate) {
+      const last = g.lastAutoUpdateAt["pxpipe"] || 0;
+      if (now - last > AUTO_UPDATE_COOLDOWN_MS) {
+        g.lastAutoUpdateAt["pxpipe"] = now;
+        const { checkForUpdate, fetchNpmLatest } = await import("@/lib/updateCheck.js");
+        const { getPxpipeStatus } = await import("@/lib/pxpipe/service.js");
+        const stat = getPxpipeStatus();
+        if (stat.installed && stat.version) {
+          const up = await checkForUpdate("pxpipe", stat.version, () => fetchNpmLatest("pxpipe-proxy"));
+          if (up.updateAvailable) {
+            console.log(`[AutoUpdate] Updating pxpipe ${stat.version} -> ${up.latestVersion}...`);
+            const { updatePxpipe } = await import("@/lib/pxpipe/service.js");
+            await updatePxpipe();
+          }
+        }
+      }
+    }
+
+    // Graphify auto-update
+    if (settings.graphifyAutoUpdate) {
+      const last = g.lastAutoUpdateAt["graphify"] || 0;
+      if (now - last > AUTO_UPDATE_COOLDOWN_MS) {
+        g.lastAutoUpdateAt["graphify"] = now;
+        const { checkForUpdate, fetchPyPiLatest } = await import("@/lib/updateCheck.js");
+        const { execSync, exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+        let cur = null;
+        try {
+          const out = execSync("uv tool list", { stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).toString();
+          const m = out.match(/graphifyy\s+v?([0-9.]+)/i);
+          cur = m ? m[1] : null;
+        } catch {}
+        if (cur) {
+          const up = await checkForUpdate("graphify", cur, () => fetchPyPiLatest("graphifyy"));
+          if (up.hasUpdate) {
+            console.log(`[AutoUpdate] Updating graphify ${cur} -> ${up.latestVersion}...`);
+            await execAsync("uv tool upgrade graphifyy");
+          }
+        }
+      }
+    }
+
+    // MCP Inspector auto-update
+    if (settings.mcpInspectorAutoUpdate) {
+      const last = g.lastAutoUpdateAt["mcp-inspector"] || 0;
+      if (now - last > AUTO_UPDATE_COOLDOWN_MS) {
+        g.lastAutoUpdateAt["mcp-inspector"] = now;
+        const { checkForUpdate, fetchNpmLatest } = await import("@/lib/updateCheck.js");
+        const { execSync, exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+        let cur = null;
+        try {
+          const out = execSync("npm list -g @modelcontextprotocol/inspector --json", { stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).toString();
+          cur = JSON.parse(out).dependencies?.["@modelcontextprotocol/inspector"]?.version || null;
+        } catch {}
+        if (cur) {
+          const up = await checkForUpdate("mcp-inspector", cur, () => fetchNpmLatest("@modelcontextprotocol/inspector"));
+          if (up.hasUpdate) {
+            console.log(`[AutoUpdate] Updating mcp-inspector ${cur} -> ${up.latestVersion}...`);
+            await execAsync("npm install -g @modelcontextprotocol/inspector@latest");
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.log("[AutoUpdate] Check error:", e.message);
+  }
+}
 
 function startWatchdog() {
   if (g.watchdogInterval) return;
   g.watchdogInterval = setInterval(() => {
     safeRestartTunnel("watchdog").catch(() => {});
     safeRestartTailscale("watchdog").catch(() => {});
+    safeRestartHeadroom("watchdog").catch(() => {});
+    safeRestartHermes("watchdog").catch(() => {});
+    checkPluginAutoUpdates().catch(() => {});
   }, WATCHDOG_INTERVAL_MS);
   if (g.watchdogInterval.unref) g.watchdogInterval.unref();
 }
@@ -390,7 +550,13 @@ function stopNetworkMonitor() {
 }
 
 export function configureTunnelMonitoring(settings) {
-  if (settings?.tunnelEnabled || settings?.tailscaleEnabled) {
+  if (
+    settings?.tunnelEnabled ||
+    settings?.tailscaleEnabled ||
+    settings?.headroomAutoUpdate ||
+    settings?.hermesAutoUpdate ||
+    settings?.pxpipeAutoUpdate
+  ) {
     startWatchdog();
     startNetworkMonitor();
     return;

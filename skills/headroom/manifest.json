@@ -15,5 +15,6 @@
       "default": "http://localhost:8787",
       "legacy_key": "headroomUrl"
     }
-  ]
+  ],
+  "version": "0.1.0"
 }
