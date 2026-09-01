@@ -165,7 +165,7 @@ pm2 restart 9router --update-env && pm2 save
 ```bash
 # Verify extended version is installed
 9router --version
-# Output: 0.5.59-extended (or latest version)
+# Output: 0.5.60-extended (or latest version)
 
 # Interactive start (Terminal UI & Web Dashboard)
 9router
@@ -180,47 +180,17 @@ pm2 restart 9router --update-env && pm2 save
 
 ---
 
-### ⚙️ 3. Automatic Startup on Boot (Windows / PM2 / Bun)
+### ⚙️ 3. Automatic Startup on Boot (Windows / macOS / Linux)
 
-#### 🪟 Option A: Windows Built-in Auto-Start (Silent Tray)
-Start 9Router in tray mode, or select **"Hide to Tray"** / **"Enable Auto-start"** from the tray menu:
+9Router includes built-in OS startup automation directly from the tray or during 1-click update:
 ```bash
 9router --tray --skip-update
 ```
-> 💡 Automatically registers `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\9router.vbs` to run silently in the system tray whenever Windows starts.
+- **Windows**: Registers `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\9router.vbs` to launch silently in the system tray on boot.
+- **macOS**: Registers `~/Library/LaunchAgents/com.9router.autostart.plist`.
+- **Linux**: Registers `~/.config/autostart/9router.desktop`.
 
-#### 🚀 Option B: PM2 Process Manager (Recommended for Servers & Background Daemons)
-Keep 9Router running 24/7 with automatic restart on crashes and reboots:
-
-```bash
-# 1. Install PM2 globally (via NPM or Bun)
-npm install -g pm2
-# (or with Bun: bun add -g pm2)
-
-# 2. Start 9Router (uses dynamic ecosystem.config.cjs if available, or direct command)
-pm2 start ecosystem.config.cjs
-# (or: pm2 start 9router --name 9router)
-
-# 3. Save process state
-pm2 save
-
-# 4. Configure auto-start on boot:
-# ── On Windows (Automated PowerShell script):
-npm run pm2:setup:windows
-# Or manually:
-# npm install -g pm2-windows-startup && pm2-startup install && pm2 save
-
-# ── On Linux / macOS:
-pm2 startup
-```
-
-**Useful PM2 commands:**
-```bash
-pm2 logs 9router    # View live logs
-pm2 restart 9router # Restart 9Router
-pm2 stop 9router    # Stop background service
-pm2 status          # Check uptime & memory
-```
+No extra process managers required. Manage status anytime via dashboard or tray menu.
 
 ---
 

@@ -1,3 +1,18 @@
+# v0.5.60-extended (2026-09-01)
+
+## 🐛 Minor Fixes & Improvements
+
+### Autostart & Native OS Daemon Automation
+- **Native OS Autostart Support**: Built-in autostart manager for Windows (VBS Startup / Registry fallback), macOS (`LaunchAgents` plist), and Linux (`autostart` desktop entry), removing dependency on PM2 and external scripts.
+- **Autostart API & Dashboard State**: Added `/api/autostart` endpoints for query, enable, and disable operations with dynamic state reflection.
+
+### Update & Version Management Fixes
+- **In-App Update Polling & Feedback**: Enhanced 1-click update check and auto-polling mechanism for extended releases.
+- **Sidebar Update Badge & Controls**: Improved update notification UI, release note preview drawer, and manual trigger action in dashboard sidebar.
+- **Cleanup**: Removed deprecated `ecosystem.config.cjs` and PM2 setup scripts in favor of native OS autostart.
+
+---
+
 # v0.5.59-extended (2026-08-31)
 
 ## 🎯 Major Features & Enhancements
