@@ -8,12 +8,9 @@ import {
   refreshProviderCredentials,
   shouldRefreshCredentials,
 } from "open-sse/services/oauthCredentialManager.js";
+import { isUnrecoverableRefreshError } from "open-sse/services/tokenRefresh.js";
+import { resolveKiroModels } from "open-sse/services/kiroModels.js";
 import {
-  GEMINI_CONFIG,
-  ANTIGRAVITY_CONFIG,
-  KIRO_CONFIG,
-  CLAUDE_CONFIG,
-  CLINE_CONFIG,
   KILOCODE_CONFIG,
   KIMCHI_CONFIG,
 } from "@/lib/oauth/constants/oauth";
@@ -215,100 +212,15 @@ async function probeCloudCodeAssistAccess(connection, accessToken, effectiveProx
   };
 }
 
+// Single unified refresh path — reuses the same handler as the live chat path.
+// ponytail: per-provider hand-rolled fetch removed; add provider here only if
+// refreshProviderCredentials can't handle it (check tokenRefresh/providers.js first).
 async function refreshOAuthToken(connection) {
-  const provider = connection.provider;
-  const refreshToken = connection.refreshToken;
-  if (!refreshToken) return null;
-
+  if (!connection.refreshToken) return null;
   try {
-    if (provider === "gemini-cli" || provider === "antigravity") {
-      const config = provider === "gemini-cli" ? GEMINI_CONFIG : ANTIGRAVITY_CONFIG;
-      const response = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-        }),
-      });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return { accessToken: data.access_token, expiresIn: data.expires_in, refreshToken: data.refresh_token || refreshToken };
-    }
-
-    if (provider === "codex" || provider === "grok-cli" || provider === "xai") {
-      return await refreshProviderCredentials(provider, connection, console);
-    }
-
-    if (provider === "claude") {
-      const response = await fetch(CLAUDE_CONFIG.tokenUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-          client_id: CLAUDE_CONFIG.clientId,
-        }),
-      });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return { accessToken: data.access_token, expiresIn: data.expires_in, refreshToken: data.refresh_token || refreshToken };
-    }
-
-    if (provider === "kiro") {
-      const psd = connection.providerSpecificData || {};
-      const clientId = psd.clientId || connection.clientId;
-      const clientSecret = psd.clientSecret || connection.clientSecret;
-      const region = psd.region || connection.region;
-      if (clientId && clientSecret) {
-        const endpoint = `https://oidc.${region || "us-east-1"}.amazonaws.com/token`;
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId, clientSecret, refreshToken, grantType: "refresh_token" }),
-        });
-        if (!response.ok) return null;
-        const data = await response.json();
-        return { accessToken: data.accessToken, expiresIn: data.expiresIn || 3600, refreshToken: data.refreshToken || refreshToken };
-      }
-      const response = await fetch(KIRO_CONFIG.socialRefreshUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": "kiro-cli/1.0.0" },
-        body: JSON.stringify({ refreshToken }),
-      });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return { accessToken: data.accessToken, expiresIn: data.expiresIn || 3600, refreshToken: data.refreshToken || refreshToken };
-    }
-
-    if (provider === "cline") {
-      const response = await fetch(CLINE_CONFIG.refreshUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          refreshToken,
-          grantType: "refresh_token",
-          clientType: "extension",
-        }),
-      });
-      if (!response.ok) return null;
-      const payload = await response.json();
-      const data = payload?.data || payload;
-      const expiresIn = data?.expiresAt
-        ? Math.max(1, Math.floor((new Date(data.expiresAt).getTime() - Date.now()) / 1000))
-        : 3600;
-      return {
-        accessToken: data?.accessToken,
-        expiresIn,
-        refreshToken: data?.refreshToken || refreshToken,
-      };
-    }
-
-    return null;
+    return await refreshProviderCredentials(connection.provider, connection, console);
   } catch (err) {
-    console.log(`Error refreshing ${provider} token:`, err.message);
+    console.log(`Error refreshing ${connection.provider} token:`, err.message);
     return null;
   }
 }
@@ -334,18 +246,42 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
   const tokenExpired = isTokenExpired(connection);
   if (config.refreshable && tokenExpired && connection.refreshToken) {
     const tokens = await refreshOAuthToken(connection);
-    if (tokens) {
+    if (tokens?.accessToken) {
       accessToken = tokens.accessToken;
       refreshed = true;
       newTokens = tokens;
+    } else if (isUnrecoverableRefreshError(tokens)) {
+      return { valid: false, error: "Token expired and refresh failed (revoked)", refreshed: false };
     } else {
-      return { valid: false, error: "Token expired and refresh failed", refreshed: false };
+      // Transient failure (network, 5xx, rate-limit) — don't hard-fail.
+      return { valid: null, error: "Could not verify right now — will retry", refreshed: false, transient: true };
     }
   }
 
   if (config.checkExpiry) {
-    if (refreshed) return { valid: true, error: null, refreshed, newTokens };
+    if (refreshed) {
+      // For Kiro: live-probe after successful refresh to catch server-side revocation.
+      if (connection.provider === "kiro") {
+        const probe = await resolveKiroModels(
+          { accessToken, refreshToken: connection.refreshToken, providerSpecificData: connection.providerSpecificData },
+          { forceRefresh: false, log: console }
+        ).catch(() => null);
+        if (probe && probe.models?.length > 0) return { valid: true, error: null, refreshed, newTokens };
+        // probe null/empty — could be transient, don't hard-fail
+        return { valid: null, error: "Kiro catalog unavailable — will retry", refreshed, newTokens, transient: true };
+      }
+      return { valid: true, error: null, refreshed, newTokens };
+    }
     if (tokenExpired) return { valid: false, error: "Token expired", refreshed: false };
+    // Token not expired — for Kiro do a live-probe to catch server-side revocation.
+    if (connection.provider === "kiro") {
+      const probe = await resolveKiroModels(
+        { accessToken, refreshToken: connection.refreshToken, providerSpecificData: connection.providerSpecificData },
+        { forceRefresh: false, log: console }
+      ).catch(() => null);
+      if (probe && probe.models?.length > 0) return { valid: true, error: null, refreshed: false, newTokens: null };
+      return { valid: null, error: "Kiro catalog unavailable — will retry", refreshed: false, transient: true };
+    }
     return { valid: true, error: null, refreshed: false, newTokens: null };
   }
 
@@ -852,6 +788,11 @@ export async function testSingleConnection(id) {
     result = await testApiKeyConnection(connection, effectiveProxy);
   } else {
     result = await testOAuthConnection(connection, effectiveProxy);
+    // Transient failure: retry once after a short pause before writing to DB.
+    if (result.valid === null) {
+      await new Promise((r) => setTimeout(r, 1500));
+      result = await testOAuthConnection(connection, effectiveProxy);
+    }
   }
 
   const latencyMs = Date.now() - start;
@@ -859,11 +800,15 @@ export async function testSingleConnection(id) {
   // Soft success (e.g. Grok CLI 402 spending-limit): credentials are good, account is
   // out of credits. Keep testStatus active; surface the message as lastError so the
   // dashboard can show a warning without marking the connection broken.
-  const softWarning = result.valid && (result.warning || result.error);
+  const softWarning = result.valid === true && (result.warning || result.error);
+  // Transient (valid===null after retry): preserve existing testStatus, only update lastError.
+  const testStatus = result.valid === null
+    ? (connection.testStatus || "error")
+    : result.valid ? "active" : "error";
   const updateData = {
-    testStatus: result.valid ? "active" : "error",
-    lastError: result.valid ? (softWarning || null) : result.error,
-    lastErrorAt: result.valid
+    testStatus,
+    lastError: result.valid === true ? (softWarning || null) : result.error,
+    lastErrorAt: result.valid === true
       ? softWarning
         ? new Date().toISOString()
         : null
