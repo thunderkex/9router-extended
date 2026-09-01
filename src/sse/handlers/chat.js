@@ -29,7 +29,22 @@ import { classifyLocalSkills, LOCAL_ROUTER_BYPASS_HEADER } from "@/skills/localS
 import { getHermesSystemPromptBlock, HERMES_MEMORY_BYPASS_HEADER } from "@/lib/plugins/hermes/memory.js";
 import { triggerHermesExtraction } from "@/lib/plugins/hermes/extraction.js";
 import { record as healthRecord } from "@/lib/routing/health.js";
-import { incrementFailover } from "@/lib/session/cache.js";
+import { incrementFailover, hasPriorFailover, markSkillInjected } from "@/lib/session/cache.js";
+
+const CONTINUITY_NOTICE =
+  "--- Continuity Notice ---\n" +
+  "This gateway may transparently switch the underlying model/account between turns " +
+  "(automatic failover). Before starting new research, web search, or tool calls: " +
+  "check the conversation history above for prior tool calls / tool results / " +
+  "\"[Tool result: ...]\" entries. If the information you need was already retrieved " +
+  "earlier in this conversation, reuse it instead of searching again. Only do new " +
+  "research for information that is missing, stale, or that the user explicitly asked " +
+  "you to re-check.\n" +
+  "--- End Continuity Notice ---";
+
+function formatSkillReminder(name, prefix = "ECC Skill") {
+  return `--- ${prefix}: ${name} (already active this conversation — see earlier turn for full instructions; do not repeat completed steps) ---`;
+}
 
 /**
  * Handle chat completion request
@@ -273,6 +288,11 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     // Resolve generic active prompts
     const manifests = await getSkillManifests();
     const activeGenericPrompts = [];
+
+    const sessionId = clientRawRequest?.headers?.["x-session-id"] || clientRawRequest?.headers?.["session-id"] || null;
+    if (sessionId && hasPriorFailover(sessionId)) {
+      activeGenericPrompts.push({ id: "continuity-notice", prompt: CONTINUITY_NOTICE });
+    }
     for (const skill of manifests) {
       const isRoutableCandidate =
         skill.routable === true ||
@@ -368,7 +388,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
           for (const match of matches) {
             const promptContent = await loadSkillPrompt(match.folder);
             if (promptContent && promptContent.trim()) {
-              const formattedPrompt = formatSkillInjection(match, promptContent);
+              const alreadyInjected = sessionId && markSkillInjected(sessionId, `ecc-${match.folder}`);
+              const formattedPrompt = alreadyInjected
+                ? formatSkillReminder(match.name)
+                : formatSkillInjection(match, promptContent);
               activeGenericPrompts.push({ id: `ecc-${match.name}`, prompt: formattedPrompt });
               matchedSkills.push({ name: match.name, score: match.score, folder: match.folder });
               if (process.env.ENABLE_REQUEST_LOGS === "true") {
@@ -403,6 +426,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
             }
             if (paramLines.length > 0) prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
           }
+          const alreadyInjectedLocal = sessionId && markSkillInjected(sessionId, `local-${match.id}`);
+          if (alreadyInjectedLocal) prompt = formatSkillReminder(match.name, "Local Skill");
           activeGenericPrompts.push({ id: `local-${match.id}`, prompt });
           if (process.env.ENABLE_REQUEST_LOGS === "true") {
             log.info("LOCAL-SKILL-ROUTER", `[local-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
@@ -479,8 +504,6 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
           null
         ) : null;
 
-        const sessionId = clientRawRequest?.headers?.["x-session-id"] || clientRawRequest?.headers?.["session-id"] || null;
-
         if (typeof lastUserText === "string") {
           triggerHermesExtraction({
             text: lastUserText,
@@ -515,7 +538,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     if (shouldFallback) {
       healthRecord(provider, { success: false, latencyMs: Date.now() - t0 });
-      try { incrementFailover(credentials.connectionId); } catch { /* fail-open */ }
+      try {
+        if (sessionId) incrementFailover(sessionId);
+        incrementFailover(credentials.connectionId);
+      } catch { /* fail-open */ }
       log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
       excludeConnectionIds.add(credentials.connectionId);
       lastError = result.error;

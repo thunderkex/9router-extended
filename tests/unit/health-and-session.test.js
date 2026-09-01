@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { record, isCircuitOpen, getProviderHealthSnapshot, buildAutoCombo } from "../../src/lib/routing/health.js";
-import { getSession, setSession, incrementFailover, invalidateSkillSet } from "../../src/lib/session/cache.js";
+import { getSession, setSession, incrementFailover, hasPriorFailover, markSkillInjected, invalidateSkillSet } from "../../src/lib/session/cache.js";
 
 describe("Routing Health & Circuit Breaker", () => {
   it("records success and keeps circuit closed", () => {
@@ -42,6 +42,30 @@ describe("Session State & LRU Cache", () => {
     incrementFailover("sess-2");
     const meta = getSession("sess-2");
     expect(meta.failoverCount).toBe(2);
+  });
+
+  it("checks prior failovers correctly", () => {
+    expect(hasPriorFailover(null)).toBe(false);
+    expect(hasPriorFailover("sess-unknown")).toBe(false);
+    expect(hasPriorFailover("sess-2")).toBe(true);
+  });
+
+  it("tracks skill injection deduplication per session", () => {
+    expect(markSkillInjected(null, "ecc-test")).toBe(false);
+    expect(markSkillInjected("sess-dedup", null)).toBe(false);
+
+    // First time should return false (not previously injected)
+    expect(markSkillInjected("sess-dedup", "ecc-e2e")).toBe(false);
+    // Subsequent calls return true (already injected)
+    expect(markSkillInjected("sess-dedup", "ecc-e2e")).toBe(true);
+    expect(markSkillInjected("sess-dedup", "ecc-e2e")).toBe(true);
+
+    // Different skill in same session
+    expect(markSkillInjected("sess-dedup", "ecc-python")).toBe(false);
+    expect(markSkillInjected("sess-dedup", "ecc-python")).toBe(true);
+
+    // Different session
+    expect(markSkillInjected("sess-dedup-2", "ecc-e2e")).toBe(false);
   });
 
   it("invalidates by skillSetHash", () => {

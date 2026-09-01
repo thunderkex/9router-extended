@@ -29,6 +29,9 @@ const lru = new Map();
  * @property {number}  failoverCount   - Times this session fell back to another provider
  * @property {number}  lastSeenAt      - epoch ms
  * @property {number}  lastMemoryExtractionAt - epoch ms when memory extraction was last triggered
+ * @property {string[]} injectedSkillIds - ECC/local skill ids whose FULL prompt has already
+ *   been injected earlier in this session. Used to downgrade repeat injections to a short
+ *   "already provided" reminder instead of re-sending the whole skill prompt every turn.
  */
 
 function evictExpired() {
@@ -97,6 +100,42 @@ export function incrementFailover(sessionId) {
   const entry = getSession(sessionId) ?? { skillSetHash: "", compiledPromptHash: "", failoverCount: 0, lastSeenAt: 0, lastMemoryExtractionAt: 0 };
   const next = setSession(sessionId, { failoverCount: entry.failoverCount + 1 });
   return next.failoverCount;
+}
+
+/**
+ * Whether this session has previously fallen over to another account/model.
+ * Used to warn the (possibly new) model that earlier turns may have been
+ * handled by a different underlying model, so it should check history
+ * before repeating research/tool calls.
+ * @param {string} sessionId
+ * @returns {boolean}
+ */
+export function hasPriorFailover(sessionId) {
+  if (!sessionId) return false;
+  const entry = getSession(sessionId);
+  return !!entry && entry.failoverCount > 0;
+}
+
+/**
+ * Record that a skill's FULL prompt has been injected for this session, and
+ * report whether it was already injected before (i.e. this is a repeat turn
+ * for that skill within the same conversation).
+ * @param {string} sessionId
+ * @param {string} skillId
+ * @returns {boolean} true if this skill was already injected earlier in this session
+ */
+export function markSkillInjected(sessionId, skillId) {
+  if (!sessionId || !skillId) return false;
+  const entry = getSession(sessionId) ?? { skillSetHash: "", compiledPromptHash: "", failoverCount: 0, lastSeenAt: 0, lastMemoryExtractionAt: 0, injectedSkillIds: [] };
+  const injected = Array.isArray(entry.injectedSkillIds) ? entry.injectedSkillIds : [];
+  const alreadyInjected = injected.includes(skillId);
+  if (!alreadyInjected) {
+    setSession(sessionId, { injectedSkillIds: [...injected, skillId] });
+  } else {
+    // still touch lastSeenAt / MRU position
+    setSession(sessionId, { injectedSkillIds: injected });
+  }
+  return alreadyInjected;
 }
 
 /**
