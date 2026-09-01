@@ -48,16 +48,32 @@ export default function Sidebar({ onClose }) {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isAutoUpdating, setIsAutoUpdating] = useState(false);
+  const [autoStartEnabled, setAutoStartEnabled] = useState(false);
+  const [autoStartChoice, setAutoStartChoice] = useState(true);
   const [shutdownCountdown, setShutdownCountdown] = useState(0);
   const [enableTranslator, setEnableTranslator] = useState(false);
   const { copied, copy } = useCopyToClipboard(2000);
 
-  const INSTALL_CMD = UPDATER_CONFIG.installCmdLatest;
+  const INSTALL_CMD = updateInfo?.updateCmd || UPDATER_CONFIG.installCmdLatest;
 
   useEffect(() => {
     fetch("/api/settings")
       .then(res => res.json())
       .then(data => { if (data.enableTranslator) setEnableTranslator(true); })
+      .catch(() => {});
+  }, []);
+
+  // Check auto-start state on mount
+  useEffect(() => {
+    fetch("/api/autostart")
+      .then(res => res.json())
+      .then(data => {
+        if (typeof data.enabled === "boolean") {
+          setAutoStartEnabled(data.enabled);
+          setAutoStartChoice(data.enabled);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -82,10 +98,40 @@ export default function Sidebar({ onClose }) {
     setIsUpdating(true);
   };
 
+  const handleAutoUpdate = async () => {
+    setIsAutoUpdating(true);
+    try {
+      const res = await fetch("/api/version/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          installCmd: INSTALL_CMD,
+          autoStart: autoStartChoice,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsDisconnected(true);
+      } else {
+        alert(data.message || "Failed to trigger automatic updater");
+        setIsAutoUpdating(false);
+      }
+    } catch {
+      setIsDisconnected(true);
+    }
+  };
+
   // Triggered by Copy button inside ManualUpdatePanel: copy + countdown + shutdown
   const handleCopyAndShutdown = async () => {
     try { await navigator.clipboard.writeText(INSTALL_CMD); } catch { /* clipboard blocked */ }
     copy(INSTALL_CMD);
+    try {
+      await fetch("/api/autostart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enable: autoStartChoice }),
+      });
+    } catch {}
     let remaining = UPDATER_CONFIG.shutdownCountdownSec;
     setShutdownCountdown(remaining);
     const timer = setInterval(() => {
@@ -356,10 +402,25 @@ export default function Sidebar({ onClose }) {
       <ConfirmModal
         isOpen={showUpdateModal}
         onClose={() => setShowUpdateModal(false)}
-        onConfirm={handleUpdate}
-        title="Update 9Router"
-        message={`Show install command for v${updateInfo?.latestVersion || ""}? You can copy it and shutdown to install manually.`}
-        confirmText="Show Command"
+        onConfirm={handleAutoUpdate}
+        title="Update 9Router Extended"
+        message={
+          <div className="space-y-3">
+            <p>
+              Upgrade to v{updateInfo?.latestVersion || ""}? Click Update to automatically install the latest 9Router Extended release and relaunch.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-text-muted bg-surface-2 p-2 rounded cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoStartChoice}
+                onChange={(e) => setAutoStartChoice(e.target.checked)}
+                className="rounded border-border-subtle text-primary focus:ring-primary"
+              />
+              <span>Enable auto startup on system boot (Run silently on background)</span>
+            </label>
+          </div>
+        }
+        confirmText={isAutoUpdating ? "Updating..." : "Auto Update"}
         cancelText="Cancel"
         variant="primary"
       />
@@ -372,18 +433,22 @@ export default function Sidebar({ onClose }) {
               latestVersion={updateInfo?.latestVersion}
               installCmd={INSTALL_CMD}
               copied={copied}
+              autoStartChoice={autoStartChoice}
+              setAutoStartChoice={setAutoStartChoice}
               onCopyAndShutdown={handleCopyAndShutdown}
               onCancel={handleCancelUpdate}
+              onAutoUpdate={handleAutoUpdate}
+              isAutoUpdating={isAutoUpdating}
               countdown={shutdownCountdown}
               isDisconnected={isDisconnected}
             />
           ) : (
             <div className="text-center p-8">
-              <div className="flex items-center justify-center size-16 rounded-full bg-red-500/20 text-red-500 mx-auto mb-4">
-                <span className="material-symbols-outlined text-[32px]">power_off</span>
+              <div className="flex items-center justify-center size-16 rounded-full bg-primary/20 text-primary mx-auto mb-4">
+                <span className="material-symbols-outlined text-[32px] animate-spin">sync</span>
               </div>
-              <h2 className="text-xl font-semibold text-white mb-2">Server Disconnected</h2>
-              <p className="text-text-muted mb-6">The proxy server has been stopped.</p>
+              <h2 className="text-xl font-semibold text-white mb-2">9Router Updating...</h2>
+              <p className="text-text-muted mb-6">Updating 9Router Extended in background. Server will relaunch shortly.</p>
               <Button variant="secondary" onClick={() => globalThis.location.reload()}>
                 Reload Page
               </Button>
@@ -399,22 +464,22 @@ Sidebar.propTypes = {
   onClose: PropTypes.func,
 };
 
-function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdown, onCancel, countdown, isDisconnected }) {
+function ManualUpdatePanel({ latestVersion, installCmd, copied, autoStartChoice, setAutoStartChoice, onCopyAndShutdown, onCancel, onAutoUpdate, isAutoUpdating, countdown, isDisconnected }) {
   const isCountingDown = countdown > 0;
   return (
     <div className="w-full max-w-lg rounded-xl bg-neutral-900/95 border border-white/10 p-6 text-white">
       <div className="flex items-center gap-3 mb-4">
         <div className="flex items-center justify-center size-11 rounded-full bg-amber-500/20 text-amber-400">
-          <span className="material-symbols-outlined text-[24px]">content_copy</span>
+          <span className="material-symbols-outlined text-[24px]">system_update</span>
         </div>
         <div>
-          <h2 className="text-lg font-semibold">Update 9Router{latestVersion ? ` to v${latestVersion}` : ""}</h2>
+          <h2 className="text-lg font-semibold">Update 9Router Extended{latestVersion ? ` to v${latestVersion}` : ""}</h2>
           <p className="text-xs text-white/60">
             {isDisconnected
-              ? "Server stopped. Paste the command into a terminal to install."
+              ? "Update in progress or server stopped."
               : isCountingDown
                 ? `Command copied. Server will stop in ${countdown}s...`
-                : "Click the button below to copy the install command and shutdown."}
+                : "Perform 1-click update or copy command for manual installation."}
           </p>
         </div>
       </div>
@@ -424,24 +489,36 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdow
         <code className="text-xs font-mono text-amber-400 break-all">{installCmd}</code>
       </div>
 
-      <ol className="text-xs text-white/70 space-y-1 list-decimal list-inside mb-4">
-        <li>Click <strong>Copy & Shutdown</strong> below.</li>
-        <li>Paste the command into your terminal and press Enter.</li>
-        <li>Run <code className="px-1 rounded bg-white/10 text-green-400">9router</code> again after install.</li>
-      </ol>
+      {setAutoStartChoice && (
+        <label className="flex items-center gap-2 text-xs text-white/70 bg-white/5 p-2 rounded mb-4 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={autoStartChoice}
+            onChange={(e) => setAutoStartChoice(e.target.checked)}
+            disabled={isCountingDown || isAutoUpdating}
+            className="rounded border-white/20 text-primary focus:ring-primary"
+          />
+          <span>Enable auto startup on system boot (No PM2 needed)</span>
+        </label>
+      )}
 
       {isDisconnected ? (
         <Button variant="secondary" fullWidth onClick={() => globalThis.location.reload()}>
           Reload Page
         </Button>
       ) : (
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onCancel} disabled={isCountingDown}>
-            Cancel
-          </Button>
-          <Button variant="primary" fullWidth onClick={onCopyAndShutdown} disabled={isCountingDown}>
-            {copied ? "✓ Copied — shutting down..." : isCountingDown ? `Shutting down in ${countdown}s` : "Copy & Shutdown"}
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onCancel} disabled={isCountingDown || isAutoUpdating}>
+              Cancel
+            </Button>
+            <Button variant="secondary" onClick={onCopyAndShutdown} disabled={isCountingDown || isAutoUpdating}>
+              {copied ? "✓ Copied" : "Copy & Shutdown"}
+            </Button>
+            <Button variant="primary" fullWidth onClick={onAutoUpdate} disabled={isCountingDown || isAutoUpdating}>
+              {isAutoUpdating ? "Updating..." : "1-Click Auto Update"}
+            </Button>
+          </div>
         </div>
       )}
     </div>

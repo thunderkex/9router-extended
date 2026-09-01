@@ -9,7 +9,8 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 
-const packageName = process.env.UPDATER_PKG_NAME || "9router";
+const packageName = process.env.UPDATER_PKG_NAME || "https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz";
+const updateCommand = process.env.UPDATER_INSTALL_CMD || "";
 const port = parseInt(process.env.UPDATER_PORT || "20129", 10);
 const tailLines = parseInt(process.env.UPDATER_TAIL_LINES || "8", 10);
 const maxRetries = parseInt(process.env.UPDATER_RETRIES || "3", 10);
@@ -131,11 +132,20 @@ function sleep(ms) {
 function runInstall() {
   state.attempt += 1;
   setPhase("installing");
-  pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — npm i -g ${packageName} --prefer-online`);
 
   const isWin = process.platform === "win32";
-  const cmd = isWin ? "npm.cmd" : "npm";
-  const args = ["i", "-g", packageName, "--prefer-online"];
+  let cmd;
+  let args;
+
+  if (updateCommand) {
+    pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — ${updateCommand}`);
+    cmd = isWin ? "cmd.exe" : "sh";
+    args = isWin ? ["/d", "/s", "/c", updateCommand] : ["-c", updateCommand];
+  } else {
+    pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — npm i -g ${packageName} --force`);
+    cmd = isWin ? "npm.cmd" : "npm";
+    args = ["i", "-g", packageName, "--force"];
+  }
 
   const child = spawn(cmd, args, {
     stdio: ["ignore", "pipe", "pipe"],

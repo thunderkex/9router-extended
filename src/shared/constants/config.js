@@ -16,8 +16,11 @@ export const GITHUB_CONFIG = {
 // Updater configuration
 export const UPDATER_CONFIG = {
   npmPackageName: "9router",
-  installCmd: "npm i -g 9router",
-  installCmdLatest: "npm i -g 9router@latest --prefer-online",
+  githubRepo: "thunderkex/9router-extended",
+  tarballUrl: "https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz",
+  gitUrl: "git+https://github.com/thunderkex/9router-extended.git#extended",
+  installCmd: "npm i -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --force",
+  installCmdLatest: "npm i -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --force",
   shutdownCountdownSec: 3,
   exitDelayMs: 500,
   statusPort: 20129,

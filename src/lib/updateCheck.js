@@ -147,5 +147,26 @@ export async function fetchGitHubReleaseLatest(repo) {
       tag = tags[0]?.name || null;
     }
   }
+  if (!tag) {
+    // Fallback: check package.json from raw repo branch
+    const rawPkg = await fetchJson(`https://raw.githubusercontent.com/${repo}/extended/package.json`);
+    if (rawPkg?.version) {
+      return rawPkg.version;
+    }
+  }
   return tag ? tag.replace(/^v/i, "") : null;
+}
+
+export async function fetchGitHubExtendedLatest(repo = "thunderkex/9router-extended") {
+  // 1. Check raw package.json from extended branch if repo is 9router or 9router-extended
+  const rawPkg = await fetchJson(`https://raw.githubusercontent.com/${repo}/extended/package.json`);
+  if (rawPkg?.version) {
+    return rawPkg.version;
+  }
+  const rawPkgMain = await fetchJson(`https://raw.githubusercontent.com/${repo}/master/package.json`);
+  if (rawPkgMain?.version) {
+    return rawPkgMain.version;
+  }
+  // 2. Check releases
+  return fetchGitHubReleaseLatest(repo);
 }

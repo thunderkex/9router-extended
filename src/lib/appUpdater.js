@@ -165,10 +165,16 @@ function resolveRelaunchCommand() {
 }
 
 // Spawn detached headless updater (Node process) then exit current server
-export function spawnUpdaterAndExit(packageName = UPDATER_CONFIG.npmPackageName) {
+export function spawnUpdaterAndExit(packageName = UPDATER_CONFIG.tarballUrl || UPDATER_CONFIG.npmPackageName, customInstallCmd = null) {
   const updaterPath = ensureRuntimeUpdater(resolveBundledUpdaterPath());
   const isTray = process.env.TRAY_MODE === "1";
   const relaunch = resolveRelaunchCommand();
+  const isBun = typeof process !== "undefined" && Boolean(process.versions?.bun);
+  const defaultCmd = isBun
+    ? `bun add -g ${UPDATER_CONFIG.tarballUrl || packageName}`
+    : `npm i -g ${packageName} --force`;
+  const installCmd = customInstallCmd || defaultCmd;
+
   // Relaunch matching original env: tray stays tray, foreground stays foreground
   const relaunchArgs = isTray
     ? [...relaunch.args, "--tray", "--skip-update"]
@@ -181,6 +187,7 @@ export function spawnUpdaterAndExit(packageName = UPDATER_CONFIG.npmPackageName)
     env: {
       ...process.env,
       UPDATER_PKG_NAME: packageName,
+      UPDATER_INSTALL_CMD: installCmd,
       UPDATER_PORT: String(UPDATER_CONFIG.statusPort),
       UPDATER_TAIL_LINES: String(UPDATER_CONFIG.statusLogTailLines),
       UPDATER_RETRIES: String(UPDATER_CONFIG.installRetries),
