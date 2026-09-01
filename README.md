@@ -870,7 +870,7 @@ Seamless translation between formats:
 | :--- | :--- | :--- | :--- |
 | ⚡ **Token Saver** | `Dashboard → Token Saver` | **RTK**, **Headroom**, **Caveman Mode**, **Ponytail**, **Watermarks Remover**, **PXPIPE** | Native, pre-configured input/output token compression & hygiene. |
 | ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Hermes Agent Toolkit**, **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, & **Custom User Skills** | Pluggable community rules, persistent agent memory sync, aesthetic guidelines, dynamic sliders, and agent tools. |
-| 🔀 **ECC Auto Skill Router** | `Dashboard → 9Router Extended` | **TF-IDF Skill Classifier**, **Auto Dynamic Prompt Routing** | Local TF-IDF classifier routing user intent to matched skills with score thresholding and trace observability. |
+| 🔀 **ECC & Local Skill Router** | `Dashboard → 9Router Extended` | **TF-IDF Skill Classifier**, **Local Smart Routing**, **Auto Dynamic Prompt Routing** | Local TF-IDF classifier routing user intent to matched ECC and local skills (`taste-skill`, `commit-lint`, `ponytail`) with independent thresholding and trace observability. |
 | 🧠 **Hermes Memory Bridge** | `Dashboard → 9Router Extended` | **Hermes Agent Persistent Store Sync** | Reads/writes `MEMORY.md` and `USER.md` (`\n§\n` delimited), auto-injects persistent notes into chat completions, and async auto-saves user preferences across sessions. |
 
 ---
@@ -944,12 +944,13 @@ You can create new skills directly from **Dashboard → 9Router Extended → Cre
 
 ---
 
-#### 4. ECC Auto Skill Router & Auto-Suggest Best Combo
+#### 4. ECC & Local Smart Skill Router & Auto-Suggest Best Combo
 
-##### 🔀 ECC Auto Skill Router (Local TF-IDF Classifier)
-- **Local TF-IDF Intent Matching:** Fast in-memory classification matches user prompt intent to community and imported ECC skills without external network calls.
+##### 🔀 ECC & Local Smart Skill Router (Local TF-IDF Classifier)
+- **Local TF-IDF Intent Matching:** Fast in-memory classification matches user prompt intent to community ECC skills and local skills (`taste-skill`, `commit-lint`, `ponytail`) without external network calls.
+- **Smart Local Skill Routing:** Topic-specific local skills activate only when the user prompt exceeds their individual relevance threshold (configurable via dynamic sliders or switched to "Always" in settings).
 - **Dynamic Skill Injection:** Injects matched skill instructions at request time based on relevance threshold and max-skills limit.
-- **Trace Observability:** Injects headers/metadata (`x-9r-ecc-skills`, `x-9r-ecc-scores`) and logs triggered rules for full inspection in request traces.
+- **Trace Observability:** Injects headers/metadata (`x-9r-ecc-skills`, `x-9r-ecc-scores`, `x-9r-local-skills`) and logs triggered rules for full inspection in request traces.
 - **1-Click Sync:** Sync bundled and imported ECC skills straight from the extended dashboard.
 
 ##### 🧠 Hermes Agent Memory Bridge & Bidirectional Sync

@@ -1,6 +1,23 @@
 # v0.5.60-extended (2026-09-01)
 
-## 🐛 Minor Fixes & Improvements
+## 🎯 Major Features & Robustness Improvements
+
+### Smart Skill Routing for Local Skills
+- **Generic TF-IDF Classification Engine**: Extracted core tokenization, TF-IDF vectorizer, and cosine similarity scoring engine into `@/skills/tfidf.js` for universal reuse.
+- **Topic-Specific Intent Router**: Introduced `localSkillRouter.js` to dynamically route local skills (`taste-skill`, `commit-lint`, `ponytail`) based on relevance score thresholding rather than unconditional injection on every prompt.
+- **Configurable Modes & Sensitivity**: Added per-skill `routing_threshold` slider and `routing_mode` (Smart / Always) in manifests.
+- **Trace Observability**: Emits `x-9r-local-skills` response header and supports `x-9router-local-skill-router: off` bypass.
+
+### Access Control Consistency & Local-Only Protection
+- **Local-Only Route Enforcement**: Enforced strict loopback verification (`LOCAL_ONLY_PATHS`) on all spawn/install routes (`/api/headroom/restart`, `/api/headroom/auto-setup`, `/api/headroom/extras`, `/api/headroom/update`, `/api/pxpipe/*`, `/api/skills/install`, `/api/plugins/hermes/update`).
+- **Tunnel API Restriction**: Blocked `/api/*` requests coming through Tunnel/Tailscale hostnames when `tunnelDashboardAccess` is disabled.
+- **Automated Coverage Guard**: Added `scripts/check-local-only-coverage.mjs` to CI/build checks to prevent future route access control drift.
+
+### Provider & Model Validation Resilience
+- **OAuth Refresh Deduplication**: Unified provider OAuth refresh in `testUtils.js` via shared `refreshProviderCredentials()`.
+- **Transient vs Unrecoverable Error Classification**: Differentiated permanent revocation (`valid: false`) from transient network/rate-limit errors (`valid: null`) using `isUnrecoverableRefreshError()`.
+- **Live Catalog Probe**: Added lightweight live probe for Kiro connections via `resolveKiroModels`.
+- **DB Test Status Protection**: Added single retry with backoff for transient failures in `testSingleConnection`, preserving active connection status against false-positive errors.
 
 ### Autostart & Native OS Daemon Automation
 - **Native OS Autostart Support**: Built-in autostart manager for Windows (VBS Startup / Registry fallback), macOS (`LaunchAgents` plist), and Linux (`autostart` desktop entry), removing dependency on PM2 and external scripts.
