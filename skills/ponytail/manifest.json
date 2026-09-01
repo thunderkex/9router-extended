@@ -6,6 +6,36 @@
   "hook": "system-prompt",
   "default_enabled": false,
   "legacy_enabled_key": "ponytailEnabled",
+  "routable": true,
+  "routing_threshold": 0.3,
+  "triggers": [
+    "refactor",
+    "simplify",
+    "minimal code",
+    "yagni",
+    "delete unused",
+    "reduce complexity",
+    "clean up",
+    "remove dead code",
+    "over-engineered",
+    "too much boilerplate",
+    "keep it simple"
+  ],
+  "keywords": [
+    "refactor",
+    "simplify",
+    "minimal",
+    "yagni",
+    "delete",
+    "remove",
+    "clean",
+    "complexity",
+    "boilerplate",
+    "stdlib",
+    "native",
+    "lean",
+    "trim"
+  ],
   "source": "https://github.com/DietrichGebert/ponytail",
   "config_schema": [
     {
@@ -30,6 +60,24 @@
       ],
       "default": "full",
       "legacy_key": "ponytailLevel"
+    },
+    {
+      "key": "routing_mode",
+      "type": "enum",
+      "label": "Activation Mode",
+      "options": [
+        {
+          "value": "smart",
+          "label": "Smart (topic-aware)",
+          "desc": "Inject only when message is about refactoring/minimal code"
+        },
+        {
+          "value": "always",
+          "label": "Always Active",
+          "desc": "Inject on every request"
+        }
+      ],
+      "default": "smart"
     }
   ],
   "version": "4.9.0"

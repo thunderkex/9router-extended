@@ -25,6 +25,7 @@ import { updateProviderCredentials, checkAndRefreshToken } from "../services/tok
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { getSkillManifests } from "@/lib/skillsRegistry.js";
 import { classifyPrompt, loadSkillPrompt, formatSkillInjection, ECC_ROUTER_BYPASS_HEADER } from "@/skills/autoRouter.js";
+import { classifyLocalSkills, LOCAL_ROUTER_BYPASS_HEADER } from "@/skills/localSkillRouter.js";
 import { getHermesSystemPromptBlock, HERMES_MEMORY_BYPASS_HEADER } from "@/lib/plugins/hermes/memory.js";
 import { triggerHermesExtraction } from "@/lib/plugins/hermes/extraction.js";
 import { record as healthRecord } from "@/lib/routing/health.js";
@@ -273,12 +274,22 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     const manifests = await getSkillManifests();
     const activeGenericPrompts = [];
     for (const skill of manifests) {
+      const isRoutableCandidate =
+        skill.routable === true ||
+        (Array.isArray(skill.config_schema) && skill.config_schema.some((c) => c.key === "routing_mode"));
+      const routingMode =
+        chatSettings[`${skill.id}RoutingMode`] ??
+        chatSettings[`${skill.id}_routing_mode`] ??
+        skill.config_schema?.find((c) => c.key === "routing_mode")?.default ??
+        (skill.routable ? "smart" : "always");
+
       if (
         skill.hook === "system-prompt" &&
         skill.id !== "caveman" &&
         skill.id !== "ponytail" &&
         skill.id !== "ecc-auto-skill-router" &&
-        skill.id !== "hermes-toolkit"
+        skill.id !== "hermes-toolkit" &&
+        !(isRoutableCandidate && routingMode === "smart")
       ) {
         const enabledKey = skill.legacy_enabled_key || `${skill.id}Enabled`;
         const isEnabled = chatSettings[enabledKey] !== undefined ? !!chatSettings[enabledKey] : !!skill.default_enabled;
@@ -287,6 +298,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
           if (Array.isArray(skill.config_schema) && skill.config_schema.length > 0) {
             const paramLines = [];
             for (const cfg of skill.config_schema) {
+              if (cfg.key === "routing_mode") continue;
               const key = cfg.legacy_key || cfg.key;
               const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
               if (prompt.includes(`{${cfg.key}}`)) {
@@ -369,7 +381,37 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         log.warn("ECC-ROUTER", `Classification failed (fail-open): ${err.message}`);
       }
     }
-
+    // Local Skill Router: topic-aware injection for routable local skills
+    const localRouterBypass = clientRawRequest?.headers?.[LOCAL_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off";
+    if (!localRouterBypass) {
+      try {
+        const localMatches = await classifyLocalSkills(body, chatSettings);
+        for (const match of localMatches) {
+          let prompt = match.prompt_template;
+          const skill = match.skill;
+          if (Array.isArray(skill?.config_schema) && skill.config_schema.length > 0) {
+            const paramLines = [];
+            for (const cfg of skill.config_schema) {
+              if (cfg.key === "routing_mode") continue;
+              const key = cfg.legacy_key || cfg.key;
+              const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
+              if (prompt.includes(`{${cfg.key}}`)) {
+                prompt = prompt.replace(new RegExp(`\\{${cfg.key}\\}`, "g"), val);
+              } else {
+                paramLines.push(`- ${cfg.label || cfg.key}: ${val}${cfg.type === "slider" ? ` (scale ${cfg.min ?? 1}-${cfg.max ?? 10})` : ""}`);
+              }
+            }
+            if (paramLines.length > 0) prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
+          }
+          activeGenericPrompts.push({ id: `local-${match.id}`, prompt });
+          if (process.env.ENABLE_REQUEST_LOGS === "true") {
+            log.info("LOCAL-SKILL-ROUTER", `[local-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
+          }
+        }
+      } catch (err) {
+        log.warn("LOCAL-SKILL-ROUTER", `Local skill classification failed (fail-open): ${err.message}`);
+      }
+    }
     const matchedSkills = activeGenericPrompts
       .filter((p) => p.id && p.id.startsWith("ecc-"))
       .map((p) => ({ name: p.id.replace(/^ecc-/, "") }));

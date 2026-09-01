@@ -1,10 +1,50 @@
 {
   "id": "human-commit",
   "name": "Human Commit Message",
-  "version": "1.0.0",
   "description": "Rules commit message human-readable dan terstruktur dengan format 'nama_file: tipe subjek singkat'.",
+  "version": "1.0.0",
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": false,
-  "source": "local"
+  "routable": true,
+  "routing_threshold": 0.35,
+  "triggers": [
+    "commit message",
+    "format commit",
+    "git commit",
+    "pesan commit",
+    "buat commit"
+  ],
+  "keywords": [
+    "commit",
+    "git",
+    "pesan",
+    "format",
+    "feat",
+    "fix",
+    "docs",
+    "style",
+    "refactor"
+  ],
+  "source": "local",
+  "config_schema": [
+    {
+      "key": "routing_mode",
+      "label": "Activation Mode",
+      "type": "enum",
+      "default": "smart",
+      "options": [
+        {
+          "value": "smart",
+          "label": "Smart (topic-aware)",
+          "desc": "Inject only when message is about commit messages"
+        },
+        {
+          "value": "always",
+          "label": "Always Active",
+          "desc": "Inject on every request"
+        }
+      ]
+    }
+  ]
 }

@@ -2,9 +2,51 @@
   "id": "watermarks-remover",
   "name": "Watermarks Remover",
   "description": "Strip AI provenance marks (invisible Unicode, C2PA) and AI transition clichés from outputs.",
+  "version": "0.6.0",
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": true,
+  "routable": true,
+  "routing_threshold": 0.35,
+  "triggers": [
+    "watermark",
+    "ai provenance",
+    "invisible unicode",
+    "zero width space",
+    "clean metadata",
+    "remove ai markers",
+    "strip watermarks",
+    "clean text format"
+  ],
+  "keywords": [
+    "watermark",
+    "provenance",
+    "unicode",
+    "c2pa",
+    "metadata",
+    "cliche",
+    "hygiene",
+    "clean"
+  ],
   "source": "https://github.com/guillaumemeyer/watermarks-remover",
-  "version": "0.6.0"
+  "config_schema": [
+    {
+      "key": "routing_mode",
+      "type": "enum",
+      "label": "Activation Mode",
+      "options": [
+        {
+          "value": "smart",
+          "label": "Smart (topic-aware)",
+          "desc": "Inject only when message is about text hygiene/watermark removal"
+        },
+        {
+          "value": "always",
+          "label": "Always Active",
+          "desc": "Inject on every request"
+        }
+      ],
+      "default": "always"
+    }
+  ]
 }

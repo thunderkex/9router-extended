@@ -2,9 +2,38 @@
   "id": "taste-skill",
   "name": "Taste Skill",
   "description": "Frontend design-taste & anti-AI-slop UI standards (rich aesthetics, 8-state components, curated palettes).",
+  "version": "1.0.0",
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": true,
+  "routable": true,
+  "routing_threshold": 0.35,
+  "triggers": [
+    "ui design",
+    "frontend styling",
+    "css design",
+    "tailwind component",
+    "landing page layout",
+    "user interface",
+    "visual aesthetic",
+    "component design",
+    "button states",
+    "typography"
+  ],
+  "keywords": [
+    "ui",
+    "frontend",
+    "css",
+    "styling",
+    "tailwind",
+    "layout",
+    "aesthetic",
+    "component",
+    "design",
+    "typography",
+    "palette",
+    "states"
+  ],
   "source": "https://github.com/Leonxlnx/taste-skill",
   "config_schema": [
     {
@@ -22,7 +51,24 @@
       "min": 1,
       "max": 10,
       "default": 5
+    },
+    {
+      "key": "routing_mode",
+      "type": "enum",
+      "label": "Activation Mode",
+      "options": [
+        {
+          "value": "smart",
+          "label": "Smart (topic-aware)",
+          "desc": "Inject only when message is about UI/frontend"
+        },
+        {
+          "value": "always",
+          "label": "Always Active",
+          "desc": "Inject on every request"
+        }
+      ],
+      "default": "smart"
     }
-  ],
-  "version": "1.0.0"
+  ]
 }

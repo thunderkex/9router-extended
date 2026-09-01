@@ -259,8 +259,12 @@ export default function ExtendedClient() {
   };
 
   const handleSkillConfig = (skill, configKey, value) => {
-    setSettings((prev) => ({ ...prev, [configKey]: value }));
-    patchSetting({ [configKey]: value });
+    const settingKey =
+      configKey === "routing_mode"
+        ? `${skill.id}RoutingMode`
+        : configKey;
+    setSettings((prev) => ({ ...prev, [settingKey]: value }));
+    patchSetting({ [settingKey]: value });
   };
 
   const handleInstallSkill = async (skill) => {
@@ -657,11 +661,48 @@ export default function ExtendedClient() {
                     </div>
                   </div>
 
-                  {/* Config Sliders if enabled */}
+                  {/* Config Sliders & Enums if enabled */}
                   {isEnabled && skill.config_schema && (
                     <div className="mt-4 pt-4 border-t border-border flex flex-col md:flex-row items-stretch md:items-center gap-4">
                       {skill.config_schema.map((cfg) => {
-                        const val = settings[cfg.legacy_key || cfg.key] ?? cfg.default;
+                        const settingKey =
+                          cfg.key === "routing_mode"
+                            ? `${skill.id}RoutingMode`
+                            : cfg.legacy_key || cfg.key;
+                        const val = settings[settingKey] ?? settings[cfg.legacy_key || cfg.key] ?? cfg.default;
+                        if (cfg.type === "enum") {
+                          const options = cfg.options || [];
+                          return (
+                            <div key={cfg.key} className="flex flex-col gap-1.5">
+                              <span className="text-xs text-text-muted font-medium">
+                                {cfg.label || cfg.key}
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {options.map((opt) => {
+                                  const optVal = opt.value ?? opt.id;
+                                  const isSelected = val === optVal;
+                                  return (
+                                    <button
+                                      key={optVal}
+                                      type="button"
+                                      onClick={() =>
+                                        handleSkillConfig(skill, cfg.legacy_key || cfg.key, optVal)
+                                      }
+                                      className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                                        isSelected
+                                          ? "bg-primary text-white border-primary"
+                                          : "bg-surface border-border text-text-muted hover:bg-surface-2"
+                                      }`}
+                                      title={opt.desc}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        }
                         if (cfg.type === "slider") {
                           return (
                             <ConfigSlider

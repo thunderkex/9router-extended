@@ -2,9 +2,48 @@
   "id": "commit-lint",
   "name": "Commit Lint",
   "description": "Injects a strict Conventional Commits prompt into the system prompt. Enforces repository standards.",
+  "version": "21.2.2",
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": false,
+  "routable": true,
+  "routing_threshold": 0.35,
+  "triggers": [
+    "commit message",
+    "conventional commits",
+    "git commit",
+    "write commit",
+    "commit format"
+  ],
+  "keywords": [
+    "commit",
+    "conventional",
+    "feat",
+    "fix",
+    "chore",
+    "refactor",
+    "git",
+    "changelog"
+  ],
   "source": "https://github.com/conventional-changelog/commitlint",
-  "version": "21.2.2"
+  "config_schema": [
+    {
+      "key": "routing_mode",
+      "type": "enum",
+      "label": "Activation Mode",
+      "options": [
+        {
+          "value": "smart",
+          "label": "Smart (topic-aware)",
+          "desc": "Inject only when message is about commit messages"
+        },
+        {
+          "value": "always",
+          "label": "Always Active",
+          "desc": "Inject on every request"
+        }
+      ],
+      "default": "smart"
+    }
+  ]
 }

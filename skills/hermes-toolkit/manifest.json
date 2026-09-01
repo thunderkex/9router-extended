@@ -2,6 +2,7 @@
   "id": "hermes-toolkit",
   "name": "Hermes Agent Memory & Toolkit",
   "description": "Auto-injects Hermes persistent memories into chat and auto-syncs learned facts back to Hermes Agent.",
+  "version": "1.0.0",
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": true,
@@ -47,6 +48,5 @@
       "step": 100,
       "default": 2200
     }
-  ],
-  "version": "1.0.0"
+  ]
 }

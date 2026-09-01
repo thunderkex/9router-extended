@@ -623,7 +623,10 @@ export default function TokenSaverClient() {
   };
 
   const handleSkillConfig = (skill, configKey, value) => {
-    const key = configKey;
+    const key =
+      configKey === "routing_mode"
+        ? `${skill.id}RoutingMode`
+        : configKey;
     setSettings(prev => ({ ...prev, [key]: value }));
     patchSetting({ [key]: value });
     if (skill.id === "caveman" && configKey === "cavemanLevel") handleCavemanLevel(value);
@@ -894,10 +897,14 @@ export default function TokenSaverClient() {
                   {isEnabled && skill.config_schema && (
                     <div className="flex flex-col items-end gap-1">
                       {skill.config_schema.map(cfg => {
-                        const val = settings[cfg.legacy_key || cfg.key] || cfg.default;
+                        const settingKey =
+                          cfg.key === "routing_mode"
+                            ? `${skill.id}RoutingMode`
+                            : cfg.legacy_key || cfg.key;
+                        const val = settings[settingKey] ?? settings[cfg.legacy_key || cfg.key] ?? cfg.default;
                         if (cfg.type === "enum") {
-                          const activeLevel = skill.id === "caveman" ? cavemanLevel : skill.id === "ponytail" ? ponytailLevel : val;
-                          const options = skill.id === "caveman" ? visibleCavemanLevels : cfg.options;
+                          const activeLevel = skill.id === "caveman" && cfg.key !== "routing_mode" ? cavemanLevel : skill.id === "ponytail" && cfg.key !== "routing_mode" ? ponytailLevel : val;
+                          const options = skill.id === "caveman" && cfg.key !== "routing_mode" ? visibleCavemanLevels : cfg.options;
                           return (
                             <div key={cfg.key} className="flex flex-col items-end gap-1">
                               <div className="flex items-center gap-1.5">
