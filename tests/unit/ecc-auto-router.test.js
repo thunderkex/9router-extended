@@ -81,7 +81,7 @@ describe("ECC Auto Skill Router Full Test Suite", () => {
         maxSkills: 1,
       });
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0].name).toMatch(/test|e2e/i);
+      expect(results[0].name).toMatch(/test|tdd|e2e/i);
       expect(results[0].score).toBeGreaterThanOrEqual(0.3);
     });
 

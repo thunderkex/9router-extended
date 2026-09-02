@@ -32,15 +32,7 @@ import { record as healthRecord } from "@/lib/routing/health.js";
 import { incrementFailover, hasPriorFailover, markSkillInjected } from "@/lib/session/cache.js";
 
 const CONTINUITY_NOTICE =
-  "--- Continuity Notice ---\n" +
-  "This gateway may transparently switch the underlying model/account between turns " +
-  "(automatic failover). Before starting new research, web search, or tool calls: " +
-  "check the conversation history above for prior tool calls / tool results / " +
-  "\"[Tool result: ...]\" entries. If the information you need was already retrieved " +
-  "earlier in this conversation, reuse it instead of searching again. Only do new " +
-  "research for information that is missing, stale, or that the user explicitly asked " +
-  "you to re-check.\n" +
-  "--- End Continuity Notice ---";
+  "--- Failover Notice: Upstream model/account switched. Check prior turns for existing tool results before searching again. ---";
 
 function formatSkillReminder(name, prefix = "ECC Skill") {
   return `--- ${prefix}: ${name} (already active this conversation — see earlier turn for full instructions; do not repeat completed steps) ---`;
