@@ -51,6 +51,7 @@ export function tokenize(text) {
  * Find the skills/ecc-imported directory
  */
 async function findEccImportedDir() {
+  const __dirname = path.dirname(new URL(import.meta.url).pathname);
   const candidates = [
     path.join(process.cwd(), "skills", "ecc-imported"),
     path.join(__dirname, "..", "..", "skills", "ecc-imported"),
@@ -100,12 +101,12 @@ export async function getSkillIndex() {
       const kwTokens = (skill.keywords || []).flatMap((k) => tokenize(k));
       const trigTokens = (skill.triggers || []).flatMap((t) => tokenize(t));
 
-      // Weight name, id, and keywords higher
+      // Weight: id (5x), name (4x), keywords (3x), triggers (3x), desc (1x)
       const allTokens = [
-        ...idTokens, ...idTokens, ...idTokens,
-        ...nameTokens, ...nameTokens, ...nameTokens,
-        ...kwTokens, ...kwTokens,
-        ...trigTokens,
+        ...idTokens, ...idTokens, ...idTokens, ...idTokens, ...idTokens,
+        ...nameTokens, ...nameTokens, ...nameTokens, ...nameTokens,
+        ...kwTokens, ...kwTokens, ...kwTokens,
+        ...trigTokens, ...trigTokens, ...trigTokens,
         ...descTokens,
       ];
 
@@ -270,15 +271,42 @@ export async function classifyPrompt(input, options = {}) {
       }
     }
 
-    // Trigger phrase / exact trigger matching boost
+    // Trigger phrase matching: partial word-level overlap
     let triggerBoost = 0;
+    const queryWords = new Set(lowerQuery.split(/\s+/).filter(w => w.length > 2));
     for (const trig of doc.triggers) {
-      if (trig && trig.length > 3 && lowerQuery.includes(trig)) {
-        triggerBoost = Math.max(triggerBoost, 0.35);
+      if (!trig || trig.length < 4) continue;
+      const trigWords = trig.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      const overlap = trigWords.filter(w => queryWords.has(w)).length;
+      if (overlap > 0) {
+        const overlapRatio = overlap / trigWords.length;
+        triggerBoost = Math.max(triggerBoost, overlapRatio * 0.4);
       }
     }
 
-    const totalScore = Math.min(1.0, dot * 1.8 + triggerBoost);
+    // Composite query boost: accumulate boosts for each matched domain
+    let domainBoost = 0;
+    const domainTerms = {
+      playwright: ['playwright', 'e2e', 'browser', 'automation', 'test'],
+      design: ['design', 'style', 'visual', 'asset', 'component', 'system'],
+      prd: ['prd', 'requirement', 'spec', 'document', 'capability', 'product']
+    };
+    
+    const docText = `${doc.name} ${doc.id} ${doc.description}`.toLowerCase();
+    for (const [domain, terms] of Object.entries(domainTerms)) {
+      const matchCount = terms.filter(t => queryWords.has(t)).length;
+      if (matchCount >= 1) {
+        const domainRelevance = terms.some(t => docText.includes(t));
+        if (domainRelevance) {
+          const isExactMatch = doc.name.includes(domain) || doc.id.includes(domain);
+          const hasRareKeyword = (domain === 'prd' && queryWords.has('prd') && docText.includes('prd'));
+          // Accumulate boosts instead of taking max
+          domainBoost += hasRareKeyword ? 0.5 : (isExactMatch ? 0.45 : 0.3);
+        }
+      }
+    }
+
+    const totalScore = Math.min(1.0, dot * 2.2 + triggerBoost + domainBoost);
 
     if (totalScore >= threshold) {
       scored.push({

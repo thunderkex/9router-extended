@@ -10,7 +10,6 @@ import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModel
 import { PROVIDERS } from "../config/providers.js";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.js";
 import { HTTP_STATUS, TOKEN_SAVER_HEADER } from "../config/runtimeConfig.js";
-import { resolveKiroModels } from "../services/kiroModels.js";
 import { handleBypassRequest } from "../utils/bypassHandler.js";
 import { trackPendingRequest, appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
 import { getExecutor } from "../executors/index.js";
@@ -104,22 +103,22 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   const stripList = getModelStrip(alias, model);
   const upstreamModel = getModelUpstreamId(alias, model);
 
-  // Live-catalog guard for Kiro: the static registry may advertise models that
-  // are not available on the authenticated account's upstream (e.g. claude-opus-5
-  // on a builder-id account whose ListAvailableModels does not include it).
-  // Without this guard, the request is forwarded upstream and Kiro rejects it
-  // with 400 INVALID_MODEL_ID. We consult the cached live catalog (5-min TTL per
-  // credential) and, when available, reject models absent from it early with a
-  // clear message rather than burning an upstream round-trip. When the live
-  // fetch fails (e.g. expired token being refreshed elsewhere), we fail open
-  // and let the upstream be the final arbiter.
+  // Live-catalog guard: the static registry may advertise models that are not
+  // available on the authenticated account's upstream. Without this guard, the
+  // request is forwarded upstream and rejected with 400 INVALID_MODEL_ID. We
+  // consult the cached live catalog (5-min TTL per credential) and, when
+  // available, reject models absent from it early with a clear message rather
+  // than burning an upstream round-trip. When the live fetch fails, we fail
+  // open and let the upstream be the final arbiter.
+  
+  // Kiro guard
   if (provider === "kiro" && credentials?.accessToken && upstreamModel) {
     try {
+      const { resolveKiroModels } = await import("../services/kiroModels.js");
       const liveCatalog = await resolveKiroModels(credentials, { log });
       if (liveCatalog?.rawModels?.length) {
         const liveUpstreamIds = new Set(liveCatalog.rawModels.map((m) => m.modelId || m.id));
-        // Strip synthetic -thinking / -agentic suffixes before checking, since
-        // those are 9router fictions the upstream does not know about.
+        // Strip synthetic -thinking / -agentic suffixes before checking
         const baseUpstreamId = upstreamModel
           .replace(/-thinking-agentic$/, "")
           .replace(/-agentic$/, "")
@@ -136,6 +135,96 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       }
     } catch (catalogErr) {
       log?.warn?.("CHAT", `Kiro live-catalog check failed (failing open): ${catalogErr?.message || catalogErr}`);
+    }
+  }
+
+  // Codex guard
+  if (provider === "codex" && credentials?.accessToken && upstreamModel) {
+    try {
+      const { resolveCodexModels } = await import("../services/codexModels.js");
+      const liveCatalog = await resolveCodexModels(credentials, { log });
+      if (liveCatalog?.models?.length) {
+        const liveUpstreamIds = new Set(liveCatalog.models.map((m) => m.id));
+        const baseUpstreamId = upstreamModel.replace(/-review$/, "");
+        if (!liveUpstreamIds.has(baseUpstreamId)) {
+          const availableList = [...liveUpstreamIds].sort().join(", ");
+          const msg = `Model "${model}" is not available on this Codex account. Available models: ${availableList}`;
+          log?.warn?.("CHAT", `Codex model rejected by live catalog: ${model} → ${baseUpstreamId} not in [${availableList}]`);
+          return createErrorResult(
+            HTTP_STATUS.BAD_REQUEST,
+            formatProviderError(new Error(msg), provider, model, HTTP_STATUS.BAD_REQUEST)
+          );
+        }
+      }
+    } catch (catalogErr) {
+      log?.warn?.("CHAT", `Codex live-catalog check failed (failing open): ${catalogErr?.message || catalogErr}`);
+    }
+  }
+
+  // Cursor guard
+  if (provider === "cursor" && credentials?.accessToken && upstreamModel) {
+    try {
+      const { resolveCursorModels } = await import("../services/cursorModels.js");
+      const liveCatalog = await resolveCursorModels(credentials, { log });
+      if (liveCatalog?.models?.length) {
+        const liveUpstreamIds = new Set(liveCatalog.models.map((m) => m.id || m.modelId));
+        if (!liveUpstreamIds.has(upstreamModel)) {
+          const availableList = [...liveUpstreamIds].sort().join(", ");
+          const msg = `Model "${model}" is not available on this Cursor account. Available models: ${availableList}`;
+          log?.warn?.("CHAT", `Cursor model rejected by live catalog: ${model} → ${upstreamModel} not in [${availableList}]`);
+          return createErrorResult(
+            HTTP_STATUS.BAD_REQUEST,
+            formatProviderError(new Error(msg), provider, model, HTTP_STATUS.BAD_REQUEST)
+          );
+        }
+      }
+    } catch (catalogErr) {
+      log?.warn?.("CHAT", `Cursor live-catalog check failed (failing open): ${catalogErr?.message || catalogErr}`);
+    }
+  }
+
+  // Kimchi guard
+  if (provider === "kimchi" && (credentials?.accessToken || credentials?.apiKey) && upstreamModel) {
+    try {
+      const { resolveKimchiModels } = await import("../services/kimchiModels.js");
+      const liveCatalog = await resolveKimchiModels(credentials, { log });
+      if (liveCatalog?.models?.length) {
+        const liveUpstreamIds = new Set(liveCatalog.models.map((m) => m.id || m.modelId));
+        if (!liveUpstreamIds.has(upstreamModel)) {
+          const availableList = [...liveUpstreamIds].sort().join(", ");
+          const msg = `Model "${model}" is not available on this Kimchi account. Available models: ${availableList}`;
+          log?.warn?.("CHAT", `Kimchi model rejected by live catalog: ${model} → ${upstreamModel} not in [${availableList}]`);
+          return createErrorResult(
+            HTTP_STATUS.BAD_REQUEST,
+            formatProviderError(new Error(msg), provider, model, HTTP_STATUS.BAD_REQUEST)
+          );
+        }
+      }
+    } catch (catalogErr) {
+      log?.warn?.("CHAT", `Kimchi live-catalog check failed (failing open): ${catalogErr?.message || catalogErr}`);
+    }
+  }
+
+  // Qoder guard
+  if (provider === "qoder" && (credentials?.accessToken || credentials?.apiKey) && upstreamModel) {
+    try {
+      const { resolveQoderModels } = await import("../services/qoderModels.js");
+      const liveCatalog = await resolveQoderModels(credentials, { log });
+      if (liveCatalog?.models?.length) {
+        const liveUpstreamIds = new Set(liveCatalog.models.map((m) => m.id || m.modelId));
+        const baseUpstreamId = upstreamModel.replace(/^qoder\//, "");
+        if (!liveUpstreamIds.has(baseUpstreamId)) {
+          const availableList = [...liveUpstreamIds].sort().join(", ");
+          const msg = `Model "${model}" is not available on this Qoder account. Available models: ${availableList}`;
+          log?.warn?.("CHAT", `Qoder model rejected by live catalog: ${model} → ${baseUpstreamId} not in [${availableList}]`);
+          return createErrorResult(
+            HTTP_STATUS.BAD_REQUEST,
+            formatProviderError(new Error(msg), provider, model, HTTP_STATUS.BAD_REQUEST)
+          );
+        }
+      }
+    } catch (catalogErr) {
+      log?.warn?.("CHAT", `Qoder live-catalog check failed (failing open): ${catalogErr?.message || catalogErr}`);
     }
   }
 
