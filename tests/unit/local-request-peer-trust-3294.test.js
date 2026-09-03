@@ -33,6 +33,13 @@ vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
 }));
 
+vi.mock("@/lib/auth/trustedPeer", () => ({
+  hasTrustedPeerHeaders: vi.fn((req) => {
+    const token = process.env.NINEROUTER_PEER_TOKEN;
+    return Boolean(token) && req.headers.get("x-9r-peer-token") === token;
+  }),
+}));
+
 const { proxy } = await import("../../src/dashboardGuard.js");
 const { getClientIp } = await import("../../src/lib/auth/loginLimiter.js");
 

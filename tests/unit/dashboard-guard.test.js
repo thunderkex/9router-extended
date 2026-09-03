@@ -33,6 +33,13 @@ vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
 }));
 
+vi.mock("@/lib/auth/trustedPeer", () => ({
+  hasTrustedPeerHeaders: vi.fn((req) => {
+    const token = process.env.NINEROUTER_PEER_TOKEN;
+    return Boolean(token) && req.headers.get("x-9r-peer-token") === token;
+  }),
+}));
+
 const { proxy, __test__ } = await import("../../src/dashboardGuard.js");
 
 const PEER_TOKEN = "peer-token-fixture";
@@ -283,11 +290,25 @@ describe("dashboard guard local-only access", () => {
       "/api/skills/install",
       "/api/cli-tools/hermes-settings",
       "/api/plugins/hermes/update",
+      "/api/version/update",
+      "/api/version/shutdown",
     ];
 
     for (const r of routes) {
       const response = await proxy(request(r, { host: "router.example.com" }));
       expect(response.status, `Expected 403 for ${r}`).toBe(403);
+    }
+  });
+
+  it("allows version update and shutdown routes from loopback when requireLogin=false", async () => {
+    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+
+    for (const r of ["/api/version/update", "/api/version/shutdown"]) {
+      const response = await proxy(localRequest(r, {
+        host: "localhost:20128",
+        origin: "http://localhost:20128",
+      }));
+      expect(response).toBe(mocks.nextResponse);
     }
   });
 

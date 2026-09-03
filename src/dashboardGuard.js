@@ -36,43 +36,12 @@ const PUBLIC_API_PATHS = [
 // Public top-level prefixes (LLM API endpoints with their own API key auth).
 const PUBLIC_PREFIXES = ["/v1", "/v1beta", "/api/v1", "/api/v1beta", "/codex"];
 
-// Always require JWT token regardless of requireLogin setting
-const ALWAYS_PROTECTED = [
+// Routes that spawn child processes, install packages, or read host secrets — restrict to localhost.
+const LOCAL_ONLY_PATHS = [
   "/api/shutdown",
   "/api/settings/database",
   "/api/version/shutdown",
   "/api/version/update",
-  "/api/oauth/cursor/auto-import",
-  "/api/oauth/kiro/auto-import",
-];
-
-// Require auth, but allow through if requireLogin is disabled
-const PROTECTED_API_PATHS = [
-  "/api/settings",
-  "/api/keys",
-  "/api/providers",
-  "/api/provider-nodes",
-  "/api/proxy-pools",
-  "/api/combos",
-  "/api/models",
-  "/api/usage",
-  "/api/oauth",
-  "/api/cloud",
-  "/api/media-providers",
-  "/api/pricing",
-  "/api/tags",
-  "/api/cli-tools",
-  "/api/mcp",
-  "/api/translator",
-  "/api/tunnel",
-  "/api/plugins",
-  "/api/pxpipe",
-  "/api/skills",
-  "/api/headroom",
-];
-
-// Routes that spawn child processes, install packages, or read host secrets — restrict to localhost.
-const LOCAL_ONLY_PATHS = [
   "/api/cli-tools/",
   "/api/mcp/",
   "/api/tunnel/tailscale-install",
@@ -106,6 +75,31 @@ const LOCAL_ONLY_PATHS = [
   "/api/pxpipe/restart",
   "/api/pxpipe/update",
   "/api/skills/install",
+];
+
+// Require auth, but allow through if requireLogin is disabled
+const PROTECTED_API_PATHS = [
+  "/api/settings",
+  "/api/keys",
+  "/api/providers",
+  "/api/provider-nodes",
+  "/api/proxy-pools",
+  "/api/combos",
+  "/api/models",
+  "/api/usage",
+  "/api/oauth",
+  "/api/cloud",
+  "/api/media-providers",
+  "/api/pricing",
+  "/api/tags",
+  "/api/cli-tools",
+  "/api/mcp",
+  "/api/translator",
+  "/api/tunnel",
+  "/api/plugins",
+  "/api/pxpipe",
+  "/api/skills",
+  "/api/headroom",
 ];
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -258,13 +252,6 @@ export async function proxy(request) {
       console.warn(`[guard] Local-only rejection for route: ${pathname}`);
       return NextResponse.json({ error: "Local only: CLI token required" }, { status: 403 });
     }
-  }
-
-  // Always protected - require valid JWT or local CLI token (machineId-based)
-  if (ALWAYS_PROTECTED.some((p) => pathname.startsWith(p))) {
-    if (await hasValidCliToken(request) || await hasValidToken(request))
-      return NextResponse.next();
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (isPublicLlmApi(pathname)) {
