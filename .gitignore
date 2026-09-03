@@ -21,6 +21,8 @@ cli/.build-home/
 product
 # production
 /build
+build-info.json
+src/shared/constants/build-info.json
 .idea/
 
 # misc

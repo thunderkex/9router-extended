@@ -1,5 +1,5 @@
 import pkg from "../../../../package.json" with { type: "json" };
-import { checkForUpdate, fetchGitHubExtendedLatest, getLocalAppMd5, clearPluginUpdateCache } from "@/lib/updateCheck.js";
+import { checkForUpdate, fetchGitHubExtendedLatest, clearPluginUpdateCache } from "@/lib/updateCheck.js";
 import { UPDATER_CONFIG } from "@/shared/constants/config.js";
 
 const EXTENDED_REPO = UPDATER_CONFIG.githubRepo || "thunderkex/9router-extended";
@@ -12,7 +12,6 @@ export async function GET(request) {
   }
 
   const currentVersion = pkg.version;
-  const currentMd5 = getLocalAppMd5();
   const isBun = typeof process !== "undefined" && Boolean(process.versions?.bun);
   const tarballUrl = UPDATER_CONFIG.tarballUrl;
 
@@ -30,8 +29,7 @@ export async function GET(request) {
     "9router-extended",
     currentVersion,
     () => fetchGitHubExtendedLatest(EXTENDED_REPO),
-    force ? 0 : 3600000,
-    currentMd5
+    force ? 0 : 3600000
   );
 
   return Response.json({

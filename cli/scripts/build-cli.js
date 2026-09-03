@@ -393,7 +393,6 @@ function buildCliPackage() {
     hash.update(fs.readFileSync(customServerDest));
   }
   hash.update(targetVersion);
-  hash.update(Date.now().toString());
 
   const buildMd5 = hash.digest("hex");
   const buildInfo = {
