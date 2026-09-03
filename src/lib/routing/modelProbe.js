@@ -42,6 +42,15 @@ export function getCachedProbeResults() {
   return valid;
 }
 
+function formatModelKey(alias, providerId, modelId) {
+  if (!modelId) return "";
+  const id = typeof modelId === "string" ? modelId : (modelId?.id || modelId?.name || "");
+  if (!id) return "";
+  if (alias && (id === alias || id.startsWith(`${alias}/`))) return id;
+  if (providerId && (id === providerId || id.startsWith(`${providerId}/`))) return id;
+  return alias ? `${alias}/${id}` : (providerId ? `${providerId}/${id}` : id);
+}
+
 /**
  * Resolve candidate models for a given provider connection.
  * Returns custom models, registry models, or connection models minus disabled ones.
@@ -112,7 +121,7 @@ export function resolveConnectionModels(connection, { customModels = null, disab
       if (registryMatch) {
         candidates.push({
           id: registryMatch.id,
-          modelKey: registryMatch.id.includes("/") ? registryMatch.id : `${alias}/${registryMatch.id}`,
+          modelKey: formatModelKey(alias, providerId, registryMatch.id),
           name: registryMatch.name || registryMatch.id,
           kind: registryMatch.kind || registryMatch.type || "llm",
           provider: providerId,
@@ -121,14 +130,14 @@ export function resolveConnectionModels(connection, { customModels = null, disab
       } else if (customMatch) {
         candidates.push({
           id: customMatch.id,
-          modelKey: customMatch.id.includes("/") ? customMatch.id : `${alias}/${customMatch.id}`,
+          modelKey: formatModelKey(alias, providerId, customMatch.id),
           name: customMatch.name || customMatch.id,
           kind: customMatch.type || customMatch.kind || "llm",
           provider: providerId,
           alias,
         });
       } else if (!kindFilter || kindFilter === "llm") {
-        const modelKey = enabledId.includes("/") ? enabledId : `${alias}/${enabledId}`;
+        const modelKey = formatModelKey(alias, providerId, enabledId);
         candidates.push({
           id: enabledId,
           modelKey,
@@ -144,7 +153,7 @@ export function resolveConnectionModels(connection, { customModels = null, disab
       if (!kindFilter || isKindMatch(regDef?.kind || regDef?.type)) {
         candidates.unshift({
           id: connection.defaultModel,
-          modelKey: connection.defaultModel.includes("/") ? connection.defaultModel : `${alias}/${connection.defaultModel}`,
+          modelKey: formatModelKey(alias, providerId, connection.defaultModel),
           name: regDef?.name || connection.defaultModel,
           kind: regDef?.kind || regDef?.type || "llm",
           provider: providerId,
@@ -158,7 +167,7 @@ export function resolveConnectionModels(connection, { customModels = null, disab
   // 2. Collect all custom models registered for this provider (e.g. openrouter/stealth/ox-alpha)
   const candidates = [];
   for (const cm of providerCustomModels) {
-    const modelKey = cm.id.includes("/") ? cm.id : `${alias}/${cm.id}`;
+    const modelKey = formatModelKey(alias, providerId, cm.id);
     candidates.push({
       id: cm.id,
       modelKey,
@@ -171,7 +180,7 @@ export function resolveConnectionModels(connection, { customModels = null, disab
 
   // 3. Collect registry models
   for (const rm of registryModels) {
-    const modelKey = rm.id.includes("/") ? rm.id : `${alias}/${rm.id}`;
+    const modelKey = formatModelKey(alias, providerId, rm.id);
     if (!candidates.some((c) => c.modelKey === modelKey)) {
       candidates.push({
         id: rm.id,
@@ -186,7 +195,7 @@ export function resolveConnectionModels(connection, { customModels = null, disab
 
   // 4. Fallback: defaultModel if present and not yet added
   if (connection.defaultModel && !isDisabled(connection.defaultModel)) {
-    const defKey = connection.defaultModel.includes("/") ? connection.defaultModel : `${alias}/${connection.defaultModel}`;
+    const defKey = formatModelKey(alias, providerId, connection.defaultModel);
     if (!candidates.some((c) => c.modelKey === defKey)) {
       const regDef = registryModels.find((rm) => rm.id === connection.defaultModel);
       if (!kindFilter || isKindMatch(regDef?.kind || regDef?.type)) {
@@ -283,7 +292,9 @@ export async function probeProviderModels(connection, options = {}) {
   };
 
   probeCache.set(first.modelKey, firstEntry);
-  record(first.provider, { success: firstRes.ok, latencyMs: firstRes.latencyMs || 0 });
+  if (firstRes.ok) {
+    record(first.provider, { success: true, latencyMs: firstRes.latencyMs || 0 });
+  }
   results.push(firstEntry);
 
   if (rest.length > 0) {
@@ -303,7 +314,9 @@ export async function probeProviderModels(connection, options = {}) {
         timestamp: Date.now(),
       };
       probeCache.set(item.modelKey, entry);
-      record(item.provider, { success: res.ok, latencyMs: res.latencyMs || 0 });
+      if (res.ok) {
+        record(item.provider, { success: true, latencyMs: res.latencyMs || 0 });
+      }
       return entry;
     });
 

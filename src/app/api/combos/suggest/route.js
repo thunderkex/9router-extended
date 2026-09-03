@@ -63,6 +63,8 @@ export async function GET(request) {
       summary = probeResult.summary || summary;
     }
 
+    const limit = parseInt(url.searchParams.get("limit") || url.searchParams.get("count") || "7", 10);
+
     const promptContext = promptText ? analyzePromptContext(promptText) : null;
 
     const models = await buildAutoCombo(
@@ -70,7 +72,8 @@ export async function GET(request) {
       { reliability: wR, latency: wL, cost: wC, quality: wQ },
       {},
       testedModels,
-      promptContext
+      promptContext,
+      limit
     );
 
     return NextResponse.json({

@@ -196,13 +196,14 @@ export function buildAutoCombo(
   weights = { reliability: 0.4, latency: 0.3, cost: 0.2, quality: 0.1 },
   pricingMap = {},
   testedModels = null,
-  promptContext = null
+  promptContext = null,
+  limit = 7
 ) {
   const { reliability: wR = 0.4, latency: wL = 0.3, cost: wC = 0.2, quality: wQ = 0.1 } = weights;
 
   // If active tested models are supplied, rank working models directly
   if (Array.isArray(testedModels) && testedModels.length > 0) {
-    const working = testedModels.filter((m) => m && m.ok && !isCircuitOpen(m.provider));
+    const working = testedModels.filter((m) => m && m.ok);
     if (working.length > 0) {
       // Enrich models with health data for ranking
       const enriched = working.map((m) => {
@@ -217,7 +218,7 @@ export function buildAutoCombo(
       });
 
       const ranked = rankModels(enriched, { reliability: wR, latency: wL, cost: wC, quality: wQ }, promptContext);
-      const balanced = getBalancedTopModels(ranked, 10);
+      const balanced = getBalancedTopModels(ranked, limit);
       return [...new Set(balanced.map((m) => m.model || m.modelId || m.name).filter(Boolean))];
     }
   }
