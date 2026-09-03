@@ -23,6 +23,7 @@ import EditCompatibleNodeModal from "./EditCompatibleNodeModal";
 import AddCustomModelModal from "./AddCustomModelModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
 import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
+import FetchOpenRouterModelsModal from "./FetchOpenRouterModelsModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -81,6 +82,7 @@ export default function ProviderDetailPage() {
   const [oneByOneSummary, setOneByOneSummary] = useState(null);
   const stopOneByOneRef = useRef(false);
   const [importingQoderModels, setImportingQoderModels] = useState(false);
+  const [showFetchOpenRouterModal, setShowFetchOpenRouterModal] = useState(false);
   const { copied, copy } = useCopyToClipboard();
 
   const AG_RISK_STORAGE_KEY = "ag_risk_confirmed";
@@ -1187,6 +1189,17 @@ export default function ProviderDetailPage() {
           </button>
         )}
 
+        {/* Fetch OpenRouter models button — show for openrouter provider */}
+        {providerId === "openrouter" && (
+          <button
+            onClick={() => setShowFetchOpenRouterModal(true)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-orange-500/40 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 transition-colors hover:border-orange-500 hover:bg-orange-500/5 sm:w-auto"
+          >
+            <span className="material-symbols-outlined text-sm">download</span>
+            {translate("Fetch OpenRouter Models")}
+          </button>
+        )}
+
         {/* Suggested models from provider API — show only models not yet added */}
         {suggestedModels.length > 0 && (() => {
           const addedFullModels = new Set([
@@ -1802,6 +1815,19 @@ export default function ProviderDetailPage() {
           isOpen={showBulkImportGrokCli}
           onClose={() => setShowBulkImportGrokCli(false)}
           onSuccess={fetchConnections}
+        />
+      )}
+
+      {providerId === "openrouter" && (
+        <FetchOpenRouterModelsModal
+          isOpen={showFetchOpenRouterModal}
+          onClose={() => setShowFetchOpenRouterModal(false)}
+          providerAlias={providerStorageAlias}
+          connectionId={connections.find((c) => c.isActive !== false)?.id}
+          customModels={customModels}
+          modelAliases={modelAliases}
+          onAddCustomModel={handleAddCustomModel}
+          onDeleteCustomModel={handleDeleteCustomModel}
         />
       )}
 

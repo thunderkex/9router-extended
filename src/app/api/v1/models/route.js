@@ -122,7 +122,50 @@ const LIVE_MODEL_RESOLVERS = {
         })),
     };
   },
+  openrouter: async (conn) => {
+    return resolveOpenRouterLiveModels(conn);
+  },
 };
+
+let openrouterLiveCache = { data: null, expiresAt: 0 };
+const OPENROUTER_LIVE_TTL = 15 * 60 * 1000; // 15 minutes
+
+async function resolveOpenRouterLiveModels(conn) {
+  if (openrouterLiveCache.data && Date.now() < openrouterLiveCache.expiresAt) {
+    return openrouterLiveCache.data;
+  }
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (conn?.apiKey) {
+      headers["Authorization"] = `Bearer ${conn.apiKey}`;
+    }
+    const res = await fetch("https://openrouter.ai/api/v1/models", {
+      headers,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const raw = json.data || json.models || [];
+    const models = raw
+      .filter((m) => m && m.id)
+      .map((m) => ({
+        id: m.id,
+        name: m.name || m.id,
+        contextLength: m.context_length,
+        capabilities: {
+          tools: true,
+          reasoning: /r1|reasoning|thinking|o1|o3/i.test(m.id),
+        },
+      }));
+    const result = { models };
+    openrouterLiveCache = { data: result, expiresAt: Date.now() + OPENROUTER_LIVE_TTL };
+    return result;
+  } catch (err) {
+    console.log("Failed to fetch live OpenRouter models:", err?.message || err);
+    return null;
+  }
+}
 
 const parseOpenAIStyleModels = (data) => {
   if (Array.isArray(data)) return data;

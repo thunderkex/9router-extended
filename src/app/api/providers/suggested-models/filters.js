@@ -7,11 +7,10 @@ export const FILTERS = {
       .filter(
         (m) =>
           m.pricing?.prompt === "0" &&
-          m.pricing?.completion === "0" &&
-          m.context_length >= 200000
+          m.pricing?.completion === "0"
       )
       .map((m) => ({ id: m.id, name: m.name, contextLength: m.context_length }))
-      .sort((a, b) => b.contextLength - a.contextLength),
+      .sort((a, b) => (b.contextLength || 0) - (a.contextLength || 0)),
 
   "opencode-free": (models) =>
     models
