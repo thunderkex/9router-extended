@@ -71,9 +71,9 @@ export function buildResult(currentVersion, latestVersion, currentMd5 = null, la
   const isMd5Different = hasMd5 && normCurrentMd5 !== normLatestMd5;
 
   // If higher version -> standard version upgrade
-  // If same version (or no version change) but MD5 differs -> rebuild update
-  const isRebuild = isMd5Different && semverDiff === 0;
-  const hasUpdate = isHigherVersion || (isMd5Different && semverDiff >= 0);
+  // If same version and both MD5s are provided but differ -> rebuild update
+  const isRebuild = Boolean(hasMd5 && isMd5Different && semverDiff === 0);
+  const hasUpdate = isHigherVersion || isRebuild;
 
   return {
     currentVersion: currentVersion || null,
@@ -237,24 +237,6 @@ export function getLocalAppMd5() {
     } catch { /* continue */ }
   }
 
-  // Fallback: generate deterministic hash from runtime build files or package.json
-  try {
-    const buildIdCandidates = [
-      path.join(process.cwd(), ".next-cli-build", "BUILD_ID"),
-      path.join(process.cwd(), ".next", "BUILD_ID"),
-      path.join(process.cwd(), "custom-server.js"),
-      path.join(process.cwd(), "package.json"),
-    ];
-
-    for (const bp of buildIdCandidates) {
-      if (fs.existsSync(bp)) {
-        const fileData = fs.readFileSync(bp);
-        cachedLocalMd5 = crypto.createHash("md5").update(fileData).digest("hex");
-        return cachedLocalMd5;
-      }
-    }
-  } catch { /* ignore */ }
-
   return null;
 }
 
@@ -290,79 +272,8 @@ export async function fetchGitHubReleaseLatest(repo) {
 }
 
 /**
- * Resolver for 9Router Extended checking version and MD5 build checksum.
+ * Resolver for 9Router Extended checking latest version from GitHub release.
  */
 export async function fetchGitHubExtendedLatest(repo = "thunderkex/9router-extended") {
-  let latestVersion = null;
-  let latestMd5 = null;
-
-  // 1. Try to fetch direct release .tgz.md5 asset
-  const directMd5 = await fetchText(`https://github.com/${repo}/releases/latest/download/9router-extended.tgz.md5`);
-  if (directMd5) {
-    const match = directMd5.match(/[a-f0-9]{32}/i);
-    if (match) latestMd5 = match[0].toLowerCase();
-  }
-
-  // 2. Fetch latest GitHub release metadata
-  const releaseData = await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`);
-  if (releaseData) {
-    if (releaseData.tag_name) {
-      latestVersion = releaseData.tag_name.replace(/^v/i, "");
-    }
-
-    // Inspect release assets for md5 files if not already found
-    if (!latestMd5 && Array.isArray(releaseData.assets)) {
-      const md5Asset = releaseData.assets.find(a =>
-        a.name === "9router-extended.tgz.md5" ||
-        a.name === "9router-latest.tgz.md5" ||
-        a.name.endsWith(".md5")
-      );
-      if (md5Asset?.browser_download_url) {
-        const assetMd5 = await fetchText(md5Asset.browser_download_url);
-        if (assetMd5) {
-          const match = assetMd5.match(/[a-f0-9]{32}/i);
-          if (match) latestMd5 = match[0].toLowerCase();
-        }
-      }
-    }
-  }
-
-  // 3. Check raw build-info.json from repository branch
-  if (!latestMd5) {
-    const rawBuildInfo = await fetchJson(`https://raw.githubusercontent.com/${repo}/extended/build-info.json`)
-      || await fetchJson(`https://raw.githubusercontent.com/${repo}/master/build-info.json`);
-    if (rawBuildInfo) {
-      if (rawBuildInfo.version && !latestVersion) latestVersion = rawBuildInfo.version;
-      if (rawBuildInfo.md5) latestMd5 = String(rawBuildInfo.md5).trim().toLowerCase();
-    }
-  }
-
-  // 4. Fallback: HEAD request on tarball to extract S3 ETag (S3 standard upload ETag is the MD5)
-  if (!latestMd5) {
-    const headRes = await fetchUrl(`https://github.com/${repo}/releases/latest/download/9router-extended.tgz`, { method: "HEAD" });
-    const etag = headRes?.headers?.etag;
-    if (etag) {
-      const cleanEtag = etag.replace(/^W\//i, "").replace(/["']/g, "").trim();
-      const match = cleanEtag.match(/^[a-f0-9]{32}$/i);
-      if (match) latestMd5 = match[0].toLowerCase();
-    }
-  }
-
-  // 5. Fallback for version from raw package.json
-  if (!latestVersion) {
-    const rawPkg = await fetchJson(`https://raw.githubusercontent.com/${repo}/extended/package.json`)
-      || await fetchJson(`https://raw.githubusercontent.com/${repo}/master/package.json`);
-    if (rawPkg?.version) {
-      latestVersion = rawPkg.version;
-    }
-  }
-
-  if (!latestVersion && !latestMd5) {
-    return null;
-  }
-
-  return {
-    version: latestVersion,
-    md5: latestMd5,
-  };
+  return fetchGitHubReleaseLatest(repo);
 }
