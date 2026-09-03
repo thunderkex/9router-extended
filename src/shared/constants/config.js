@@ -9,13 +9,13 @@ export const APP_CONFIG = {
 
 // GitHub configuration
 export const GITHUB_CONFIG = {
-  changelogUrl: "https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md",
+  changelogUrl: "https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/CHANGELOG.md",
   donateUrl: "https://9router.com/api/donate",
 };
 
 // Updater configuration
 export const UPDATER_CONFIG = {
-  npmPackageName: "9router",
+  npmPackageName: "9router-extended",
   githubRepo: "thunderkex/9router-extended",
   tarballUrl: "https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz",
   gitUrl: "git+https://github.com/thunderkex/9router-extended.git#extended",

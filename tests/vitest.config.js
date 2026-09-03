@@ -3,6 +3,8 @@ import { resolve } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const openSseDir = resolve(__dirname, "../open-sse").replace(/\\/g, "/");
+const srcDir = resolve(__dirname, "../src").replace(/\\/g, "/");
 
 export default defineConfig({
   test: {
@@ -17,13 +19,19 @@ export default defineConfig({
     maxConcurrency: 60,
     // Suppress noisy console output from handlers under test
     silent: false,
+    server: {
+      deps: {
+        inline: [/open-sse/, /src/],
+      },
+    },
   },
   resolve: {
-    // Use array form so subpath aliases (e.g. "@/lib/db/index.js") resolve correctly.
     alias: [
-      { find: /^open-sse\//, replacement: resolve(__dirname, "../open-sse") + "/" },
-      { find: "open-sse", replacement: resolve(__dirname, "../open-sse") },
-      { find: /^@\//, replacement: resolve(__dirname, "../src") + "/" },
+      { find: /^open-sse\/(.*)/, replacement: `${openSseDir}/$1` },
+      { find: /^open-sse$/, replacement: `${openSseDir}/index.js` },
+      { find: "open-sse", replacement: openSseDir },
+      { find: /^@\/(.*)/, replacement: `${srcDir}/$1` },
+      { find: "@", replacement: srcDir },
     ],
   },
 });

@@ -8,16 +8,16 @@ Drop-in skills for any AI agent (Claude, Cursor, ChatGPT, custom SDK). Just **co
 
 | Capability | Copy link below and paste to your AI |
 |---|---|
-| **Entry / Setup** (start here) | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router/SKILL.md |
-| Chat / code-gen | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-chat/SKILL.md |
-| Image generation | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-image/SKILL.md |
-| Video generation (xAI Grok Imagine) | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-video/SKILL.md |
-| Text-to-speech | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-tts/SKILL.md |
-| Speech-to-text | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-stt/SKILL.md |
-| Embeddings | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-embeddings/SKILL.md |
-| Web search | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-web-search/SKILL.md |
-| Web fetch (URL → markdown) | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router-web-fetch/SKILL.md |
-| **Hermes Agent Toolkit** | https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/hermes-toolkit/SKILL.md |
+| **Entry / Setup** (start here) | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router/SKILL.md |
+| Chat / code-gen | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-chat/SKILL.md |
+| Image generation | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-image/SKILL.md |
+| Video generation (xAI Grok Imagine) | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-video/SKILL.md |
+| Text-to-speech | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-tts/SKILL.md |
+| Speech-to-text | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-stt/SKILL.md |
+| Embeddings | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-embeddings/SKILL.md |
+| Web search | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-web-search/SKILL.md |
+| Web fetch (URL → markdown) | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-web-fetch/SKILL.md |
+| **Hermes Agent Toolkit** | https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/hermes-toolkit/SKILL.md |
 | **ECC Auto Skill Router** | Local TF-IDF intent router (286 skills catalog) |
 
 ## Extended Rules & Skills in 9Router
@@ -35,7 +35,7 @@ Drop-in skills for any AI agent (Claude, Cursor, ChatGPT, custom SDK). Just **co
 Paste to your AI (Claude, Cursor, ChatGPT, …):
 
 ```
-Read this skill and use it: https://raw.githubusercontent.com/decolua/9router/refs/heads/master/skills/9router/SKILL.md
+Read this skill and use it: https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router/SKILL.md
 ```
 
 Then ask normally — *"generate an image of a cat"*, *"transcribe this URL"*, etc.
@@ -49,7 +49,8 @@ export NINEROUTER_KEY="sk-..."                   # from Dashboard → Keys (only
 
 Verify: `curl $NINEROUTER_URL/api/health` → `{"ok":true}`.
 
-## Links
+## Links & Credits
 
-- Source: https://github.com/decolua/9router
-- Dashboard: https://9router.com
+- Source (Extended): https://github.com/thunderkex/9router-extended
+- Original Project (Upstream): https://github.com/decolua/9router
+- Dashboard: http://localhost:20128/dashboard

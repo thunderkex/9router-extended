@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import REGISTRY from "../../open-sse/providers/registry/index.js";
 import { handleFetchCore } from "../../open-sse/handlers/fetch/index.js";
-import { AI_PROVIDERS, getProvidersByKind } from "@/shared/constants/providers.js";
+import { AI_PROVIDERS, getProvidersByKind } from "../../src/shared/constants/providers.js";
 
 const CONFIG = {
   baseUrl: "https://ollama.com/api/web_fetch",
