@@ -31,12 +31,16 @@
 **9Router menyelesaikan itu semua:**
 
 - ✅ **RTK Token Saver** - Kompresi otomatis output tool, hemat 20-40% token tiap request
-- ✅ **ECC Auto Skill Router** - Klasifikasi prompt lokal TF-IDF & injeksi skill dinamis
+- ✅ **Session Prompt Deduplication** - Hindari pengulangan system prompt skill pada multi-turn chat, hemat 15-30% token
+- ✅ **OpenRouter Live Model Sync** - Cari, filter, dan import model langsung dari katalog OpenRouter beserta opsi kapabilitas vision/reasoning
+- ✅ **ECC & Local Smart Skill Router** - Klasifikasi prompt lokal TF-IDF & injeksi skill dinamis berdasarkan relevansi topik
+- ✅ **Hermes Agent Memory Bridge** - Sinkronisasi memori dua arah (`MEMORY.md`, `USER.md`) secara otomatis
+- ✅ **Dashboard Guard & Security** - Pengamanan akses lokal (`LOCAL_ONLY_PATHS`) dan isolasi endpoint admin pada Cloudflare Tunnel/Tailscale
 - ✅ **Auto-Suggest Best Combo** - Probing performa & latency model untuk kombo fallback terbaik
 - ✅ **Maksimalkan langganan** - Lacak kuota dan habiskan sebelum reset
 - ✅ **Fallback otomatis** - Langganan → murah → gratis, tanpa downtime
 - ✅ **Multi-akun** - Round-robin antar akun untuk tiap provider
-- ✅ **Universal** - Mendukung Claude Code, Codex, Cursor, Cline, dan tool CLI apa pun
+- ✅ **Universal** - Mendukung Claude Code, Codex, Cursor, Cline, Antigravity, dan tool CLI apa pun
 
 ---
 
@@ -44,77 +48,76 @@
 
 ```
 ┌─────────────┐
-│   Tool CLI  │  (Claude Code, Codex, Gemini CLI, OpenClaw, Cursor, Cline...)
+│   Tool CLI  │  (Claude Code, Codex, Cursor, Cline, Antigravity, OpenClaw...)
 │    kamu     │
 └──────┬──────┘
        │ http://localhost:20128/v1
        ↓
 ┌─────────────────────────────────────────┐
-│         9Router (Smart Router)          │
+│     9Router Extended (Smart Router)     │
+│  • RTK Token Saver (potong output tool) │
+│  • Session Prompt Deduplication         │
 │  • Konversi format (OpenAI ↔ Claude)    │
-│  • Pelacakan kuota                      │
-│  • Refresh token otomatis               │
+│  • Pelacakan kuota & auto token refresh │
+│  • Router skill lokal (TF-IDF)          │
 └──────┬──────────────────────────────────┘
        │
-       ├─→ [Tier 1: Langganan] Claude Code, Codex, Gemini CLI
+       ├─→ [Tier 1: Langganan] Claude Code, Codex, GitHub Copilot
        │   ↓ kuota habis
        ├─→ [Tier 2: Murah] GLM ($0.6/1M), MiniMax ($0.2/1M)
        │   ↓ batas budget tercapai
-       └─→ [Tier 3: Gratis] iFlow, Qwen, Kiro (unlimited)
+       └─→ [Tier 3: Gratis] Kiro AI, OpenCode Free, Vertex ($300 credits)
 
-Hasil: ngoding tanpa berhenti, biaya minimum
+Hasil: ngoding tanpa berhenti, biaya minimum + hemat token via RTK
 ```
 
 ---
 
-## ⚡ Mulai Cepat
+## ⚡ Mulai Cepat & Instalasi (9Router Extended)
 
-**1. Install secara global:**
+### 🚀 1. Install 9Router Extended
+
+**Opsi A: Menggunakan Bun (Direkomendasikan)**
+```bash
+bun add -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz
+```
+
+**Opsi B: Menggunakan NPM**
+```bash
+npm install -g https://github.com/thunderkex/9router-extended/releases/latest/download/9router-extended.tgz --force
+```
+
+**Opsi C: Dari Branch Git Langsung**
+```bash
+npm install -g git+https://github.com/thunderkex/9router-extended.git#extended
+```
+
+### 🚦 2. Jalankan & Buka Dashboard
 
 ```bash
-npm install -g 9router
+# Jalankan interaktif (Terminal UI & Web Dashboard)
 9router
+
+# Atau jalankan di background / System Tray
+9router --tray --skip-update
 ```
 
-🎉 Dashboard terbuka di `http://localhost:20128`
+🎉 Dashboard otomatis terbuka di `http://localhost:20128`
 
-**2. Hubungkan provider gratis (tanpa perlu daftar):**
+### 🎁 3. Hubungkan Provider Gratis (Tanpa Perlu Daftar)
 
-Dashboard → Providers → hubungkan **Claude Code** atau **Antigravity** → login OAuth → selesai!
+Buka **Dashboard** → **Providers** → hubungkan **Kiro AI** (~50 kredit gratis/bulan) atau **OpenCode Free** (tanpa autentikasi) → selesai!
 
-**3. Pakai di tool CLI kamu:**
+### 💻 4. Pakai di Tool CLI Kamu
 
+```yaml
+Endpoint: http://localhost:20128/v1
+API Key: [salin dari Dashboard -> Keys]
+Model: auto-best (atau cc/claude-sonnet-5, kiro/claude-sonnet-4-5)
 ```
-Konfigurasi Claude Code/Codex/Gemini CLI/OpenClaw/Cursor/Cline:
-  Endpoint: http://localhost:20128/v1
-  API Key: [salin dari dashboard]
-  Model: if/kimi-k2-thinking
-```
-
-**Cuma itu!** Mulai ngoding dengan model AI gratis.
-
-**Alternatif: jalankan dari source (repo ini):**
-
-Paket repo ini bersifat privat (`9router-app`), jadi menjalankan dari source/Docker adalah jalur yang diharapkan untuk pengembangan lokal.
-
-```bash
-cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
-```
-
-Mode produksi:
-
-```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
-```
-
-URL default:
-- Dashboard: `http://localhost:20128/dashboard`
-- API kompatibel OpenAI: `http://localhost:20128/v1`
 
 ---
+
 
 ## 🎥 Video Tutorial
 

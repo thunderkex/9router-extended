@@ -27,6 +27,9 @@ Drop-in skills for any AI agent (Claude, Cursor, ChatGPT, custom SDK). Just **co
 - **`ecc-auto-skill-router`**: In-memory TF-IDF intent classifier routing incoming prompts to matching domain skills.
 - **`taste-skill`**: Anti-AI-slop design variance and motion intensity sliders for frontend UI generation.
 - **`caveman` & `ponytail`**: Token-saving system prompt injectors for terse technical communication and YAGNI-first minimalist coding.
+- **`commit-lint` & `human-commit`**: Semantic and natural human git commit formatting rules.
+- **`human-handwritten`**: Anti-slop authentic prose and writing style rules.
+- **`watermarks-remover`**: Zero-width unicode & AI provenance watermark cleaner.
 - **`mcp-inspector`**: Inspector and validation tool for Model Context Protocol servers.
 - **`graphify`**: Visual knowledge graph builder for codebases and documents.
 

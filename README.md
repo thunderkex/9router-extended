@@ -165,7 +165,7 @@ pm2 restart 9router --update-env && pm2 save
 ```bash
 # Verify extended version is installed
 9router --version
-# Output: 0.5.60-extended (or latest version)
+# Output: 0.5.65-extended (or latest version)
 
 # Interactive start (Terminal UI & Web Dashboard)
 9router
@@ -651,10 +651,13 @@ a third party under a provider named "Self-hosted".
 | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | 🚀 **RTK Token Saver** ([RTK](https://github.com/rtk-ai/rtk) ⭐40K)               | Compress tool outputs (`git diff`, `grep`, `ls`, `tree`...) before sending to LLM        | Save **20-40% input tokens** per request          |
 | ✂️ **Token Trimmer & Dedup**                                                      | Schema-aware sliding-window trimming + paragraph prompt deduplication                     | **Prevents context overflows & redundant tokens** |
+| ⚡ **Session Skill Deduplication**                                                | Tracks injected skill prompts per conversation session; skips reinjection on follow-ups  | **Saves 15-30% context tokens on multi-turn chats** |
 | 🧠 **Headroom Token Saver** ([Headroom](https://github.com/chopratejas/headroom)) | 1-Click pip auto-setup, multi-port conflict avoidance & auto-detect `/v1/compress` proxy | **Zero-config context compression**               |
 | 🪨 **Caveman Mode** ([Caveman](https://github.com/JuliusBrussee/caveman) ⭐52K)   | Inject caveman-speak prompt → LLM replies terse, technical substance preserved           | Save **up to 65% output tokens**                  |
 | 🐴 **Ponytail** ([Ponytail](https://github.com/DietrichGebert/ponytail))          | Inject "lazy senior dev" prompt → LLM writes minimal, YAGNI-first code (Lite/Full/Ultra) | **Fewer output tokens, less refactoring**         |
 | 🧩 **9Router Extended & Skills**                                                  | Dynamic prompt injection, `pre-route`/`post-response` hooks, and agent tool registry     | **Infinitely customizable**                       |
+| 🌐 **OpenRouter Live Model Sync**                                                 | Query OpenRouter live catalog, filter models, and import with custom vision/reasoning caps | **Instant access to newly released models**       |
+| 🛡️ **Dashboard Guard & Security**                                                 | Unified auth gateway, strict loopback checks on admin APIs, and safe tunnel isolation    | **Protects API keys and sensitive settings**      |
 | ⚡ **Routing Health & Circuit Breaker**                                            | In-memory EMA latency tracking ($\alpha=0.2$) + auto-trip on consecutive failures        | **Instant auto-failover, zero dead calls**        |
 | 🎯 **Smart Auto-Combos & Fallback**                                               | Score-ranked fallback recommendations: Subscription → Cheap → Free                       | Never stop coding, zero downtime                  |
 | 📊 **Real-Time Quota & Latency Tracking**                                         | Live token count, reset countdown, and SSE latency push stream (`/api/health/latency-stream`) | Maximize subscription value & visibility          |
@@ -667,6 +670,7 @@ a third party under a provider named "Self-hosted".
 | 💾 **Cloud Sync**                                                                 | Sync config across devices                                                               | Same setup everywhere                             |
 | 📊 **Usage Analytics**                                                            | Track tokens, cost, trends over time                                                     | Optimize spending                                 |
 | 🌐 **Deploy Anywhere**                                                            | Localhost, VPS, Docker, Cloudflare Workers                                               | Flexible deployment options                       |
+| 🔄 **Extended In-App Update Engine**                                              | Direct GitHub Releases sync, update badge, and 1-click update command assistance         | **Always stay updated on the latest fork release** |
 
 Set `X-9Router-Token-Saver: off` to bypass all token savers for one chat request.
 
@@ -868,10 +872,14 @@ Seamless translation between formats:
 
 | Category | Location in Dashboard | Included Modules | Functionality |
 | :--- | :--- | :--- | :--- |
-| ⚡ **Token Saver** | `Dashboard → Token Saver` | **RTK**, **Headroom**, **Caveman Mode**, **Ponytail**, **Watermarks Remover**, **PXPIPE** | Native, pre-configured input/output token compression & hygiene. |
-| ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Hermes Agent Toolkit**, **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, & **Custom User Skills** | Pluggable community rules, persistent agent memory sync, aesthetic guidelines, dynamic sliders, and agent tools. |
+| ⚡ **Token Saver** | `Dashboard → Token Saver` | **RTK**, **Headroom**, **Caveman Mode**, **Ponytail**, **Watermarks Remover**, **PXPIPE**, **Token Trimmer** | Native, pre-configured input/output token compression & prompt hygiene. |
+| ✨ **9Router Extended** | `Dashboard → 9Router Extended` | **Hermes Agent Toolkit**, **Taste Skill**, **MCP Inspector**, **Graphify**, **Commit Lint**, **Human Handwritten**, & **Custom User Skills** | Pluggable community rules, persistent agent memory sync, aesthetic guidelines, dynamic sliders, and agent tools. |
 | 🔀 **ECC & Local Skill Router** | `Dashboard → 9Router Extended` | **TF-IDF Skill Classifier**, **Local Smart Routing**, **Auto Dynamic Prompt Routing** | Local TF-IDF classifier routing user intent to matched ECC and local skills (`taste-skill`, `commit-lint`, `ponytail`) with independent thresholding and trace observability. |
 | 🧠 **Hermes Memory Bridge** | `Dashboard → 9Router Extended` | **Hermes Agent Persistent Store Sync** | Reads/writes `MEMORY.md` and `USER.md` (`\n§\n` delimited), auto-injects persistent notes into chat completions, and async auto-saves user preferences across sessions. |
+| 🌐 **OpenRouter Live Model Sync** | `Dashboard → Providers → [Provider]` | **Live OpenRouter Catalog Query & Import** | Live modal search and filtering across the OpenRouter catalog with automatic vision & reasoning capability configuration. |
+| ⚡ **Session Prompt Dedup** | `Automatic Chat Engine` | **Multi-Turn Skill Prompt Cache** | Tracks injected skill prompts per conversation session and skips redundant reinjection on follow-up turns, cutting prompt bloat by 15-30%. |
+| 🛡️ **Dashboard Guard & Security** | `Network & API Gateway` | **Unified Auth & Loopback Gateway** | Enforces strict loopback checks on management APIs (`LOCAL_ONLY_PATHS`) and isolates private endpoints during tunnel usage. |
+| 🔄 **Extended Release Hub** | `Dashboard → Sidebar` | **In-App GitHub Release Sync** | Dedicated update check targeting GitHub releases with update notification badges and 1-click update commands. |
 
 ---
 
@@ -964,6 +972,62 @@ You can create new skills directly from **Dashboard → 9Router Extended → Cre
 - **Kind-Aware Filtering:** Probing automatically isolates chat/LLM endpoints (`kind: "llm"`), skipping embeddings, audio, and image models during chat combo generation.
 - **Cross-Connection Deduplication:** Merges model variants across duplicate accounts, prioritizing active and lowest-latency endpoints.
 - **Smart Fallback Tiers:** Generates balanced multi-tier combos (e.g. `Tier 1: Subscription / High-Quality` → `Tier 2: Fast & Cheap` → `Tier 3: Free / High-Quota Fallback`).
+
+---
+
+#### 5. OpenRouter Live Model Sync & Dynamic Catalog Resolution
+
+9Router Extended allows you to query the live OpenRouter model catalog directly from the provider details page:
+
+- **Live Model Discovery:** Click **"Fetch OpenRouter Models"** in `Dashboard → Providers → [Provider]` to open an interactive search and filtering modal (`FetchOpenRouterModelsModal`).
+- **Rich Metadata & Filtering:** Filter models by name, ID, context window length, pricing (prompt/completion), and capability flags.
+- **Custom Capabilities Upsert:** Automatically sets or customizes vision and reasoning capabilities (`AddCustomModelModal`) with stored values persisting in SQLite.
+- **Live `/v1/models` API Resolution:** Dynamically imported models are exposed immediately via `/v1/models` and `/api/v1/models` without requiring a server restart.
+
+---
+
+#### 6. Multi-Turn Session Deduplication & Continuity Optimization
+
+To prevent token waste in extended conversational workflows:
+
+- **Per-Session Skill Tracking:** 9Router Extended maintains an in-memory session cache (`cache.js`, `chat.js`) that records which skill prompts have been injected into a given conversation session.
+- **Redundant Prompt Stripping:** Subsequent turns in the same chat session skip re-injecting static skill system prompts, eliminating thousands of wasted tokens per turn while keeping the model context focused.
+- **Zero Configuration:** Enabled automatically across all streaming, non-streaming, and OpenAI/Claude translation pipelines.
+
+---
+
+#### 7. Unified Security Gateway & Loopback Access Control
+
+For secure local and remote deployments:
+
+- **Unified Dashboard Guard (`dashboardGuard.js`):** Centralizes all request authentication, dashboard session validation, and tunnel access control.
+- **Loopback-Only Route Protection (`LOCAL_ONLY_PATHS`):** Administrative routes that execute process spawns or installations (`/api/headroom/*`, `/api/pxpipe/*`, `/api/skills/install`, `/api/plugins/hermes/*`) strictly verify loopback/local request origin to prevent remote code execution over exposed endpoints.
+- **Tunnel Gating:** When exposing 9Router via Cloudflare Tunnels or Tailscale, administrative and internal API routes are protected unless explicitly enabled.
+
+---
+
+#### 8. Pluggable Agent Skills Suite
+
+9Router Extended provides a full collection of drop-in skills with standardized YAML frontmatter for instant integration with Claude Code, Cursor, Antigravity, OpenClaw, and custom agents:
+
+| Skill | Description | Location / Drop-in Link |
+| :--- | :--- | :--- |
+| **`9router`** | Core router entry and setup skill | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router/SKILL.md) |
+| **`9router-chat`** | Text & code completion routing | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-chat/SKILL.md) |
+| **`9router-image`** | Multimodal image generation | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-image/SKILL.md) |
+| **`9router-video`** | Video generation (Grok Imagine) | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-video/SKILL.md) |
+| **`9router-tts`** | Text-to-speech audio synthesis | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-tts/SKILL.md) |
+| **`9router-stt`** | Speech-to-text audio transcription | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-stt/SKILL.md) |
+| **`9router-embeddings`** | High-performance text embeddings | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-embeddings/SKILL.md) |
+| **`9router-web-fetch`** | Clean URL-to-Markdown web fetch | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-web-fetch/SKILL.md) |
+| **`9router-web-search`** | Live web search querying | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/9router-web-search/SKILL.md) |
+| **`hermes-toolkit`** | Persistent memory bridge (`MEMORY.md`, `USER.md`) | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/hermes-toolkit/SKILL.md) |
+| **`taste-skill`** | Anti-AI-slop design & motion variance sliders | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/taste-skill/SKILL.md) |
+| **`ponytail`** | Lazy senior dev YAGNI coding injector | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/ponytail/SKILL.md) |
+| **`caveman`** | Ultra-terse output compression | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/caveman/SKILL.md) |
+| **`human-commit`** | Direct, natural Git commit message formatting | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/human-commit/SKILL.md) |
+| **`human-handwritten`** | Anti-slop authentic prose and writing style | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/human-handwritten/SKILL.md) |
+| **`watermarks-remover`** | Zero-width unicode & metadata cleaner | [SKILL.md](https://raw.githubusercontent.com/thunderkex/9router-extended/refs/heads/extended/skills/watermarks-remover/SKILL.md) |
 
 ---
 

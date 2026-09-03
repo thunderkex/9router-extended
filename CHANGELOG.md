@@ -1,60 +1,70 @@
-# v0.5.65 (2026-09-03)
+# v0.5.65-extended (2026-09-03)
 
-## Features
+## Major Features & Extended Ecosystem
 
-- **Fetch**: add Ollama Cloud web fetch provider
-- **Gemini / Antigravity**: add Gemini 3.8 Flash support and bump IDE fingerprint to 2.11.0
-- **Claude**: add Claude Fable 5.1 support (adaptive thinking with `output_config.effort`), bump Claude Code fingerprint to 2.1.258 for new-model access
-- **Providers**: add client-side status filter (All / Active / Inactive / No connection) on the Providers dashboard; add max height and scroll for connection list
-- **Providers & Models**: streamline tokenrouter model catalog down to 22 flagship/newest models and add missing provider icons; refresh Codebuddy-CN catalog (add hy4-preview/hy3/glm-5.3/kimi-k3-1, drop EOL glm-5.0/glm-4.7)
-- **Models**: capability toggles (vision, reasoning) when adding custom models with upsert and live caps refresh
-- **CLI tools**: support saving and managing custom API key presets
-- **Quota**: add usage and rate-limit tracking for Groq via `x-ratelimit-*` headers
-- **i18n**: complete Indonesian translation (1391 keys)
+### OpenRouter Live Model Sync & Dynamic Catalog Resolution
 
-## Fixes
+- **Interactive OpenRouter Model Fetcher (`FetchOpenRouterModelsModal`)**: Integrated search, filter, and import modal directly on provider detail screens (`/dashboard/providers/[id]`) to query the live OpenRouter catalog.
+- **Modality & Pricing Metadata**: Displays context window length, prompt/completion pricing, and automatically sets initial vision and reasoning capabilities upon import.
+- **Dynamic `/v1/models` Provider Catalog Resolution**: Live model resolution, filtering, and caching for dynamic providers in `/v1/models` and `/api/v1/models` API routes.
+- **Live Capability Toggles**: Visual capability toggles (vision, reasoning) when adding or modifying custom models, stored in SQLite and reflected immediately in model catalog heuristics (`AddCustomModelModal`, `aliasRepo`, `useModelCaps`).
 
-- **Security**: close SSRF guard bypasses in `ssrfGuard.js` (alternate IPv6 encodings, hostname trailing dots, wildcard DNS resolution check, safe redirect handling) (#3714)
-- **Model markers**: strip the `[1m]` context marker Claude Code appends to model names (`claude-opus-5[1m]`) preventing model resolution failures (#3690)
-- **Claude**: drop `server_tool_use` blocks carrying foreign IDs to avoid Anthropic 400 rejections; never anchor cache breakpoints on `defer_loading` tools (#3567)
-- **Antigravity**: strike-break optimistic quota readings that keep 429ing by blocking the connection+model pair for 15m after 3 strikes (#3681); preserve client identity on model catalog requests (#3414)
-- **Auth**: protect root `/responses` rewrite requiring API key validation in dashboardGuard
-- **Chat & Docker**: return 503 Service Unavailable when all credentials are rate-limited; explicitly bundle `node-machine-id` into standalone Docker runtime image
-- **OpenCode**: route Muse Spark models to `/zen/v1/responses` and declare vision support; filter inactive free model
-- **Kiro**: preserve inline images as OpenAI-compatible `image_url` parts in OpenAI MITM; remove redundant top-level `systemPrompt` from payload
-- **Usage**: read Responses-shape `cached_tokens` in `extractUsageFromResponse` for non-streaming traffic
-- **Models**: support single model lookup with provider-prefixed IDs (e.g. `cc/claude-sonnet-5`)
-- **Translator**: route Gemini thinking through `reasoning_effort` on OpenAI-compatible wire; convert `prefixItems` and ensure array items in Gemini schema sanitizer
-- **UI**: apply persisted theme before first paint to prevent flash on reload; translate combo vision adapter label
+### 9Router Extended Update Check & Release Scaffolding
 
-# v0.5.59 (2026-08-29)
+- **Independent GitHub Release Sync (`updateCheck.js`)**: Dedicated update checker targeting `thunderkex/9router-extended` GitHub Releases instead of upstream npm registry.
+- **Asset Validation & Background Polling**: Validates pre-bundled release tarball assets (`9router-extended.tgz`), checks Git tag versions, and handles rate-limited GitHub API queries gracefully with fallback caching.
+- **Sidebar Update Notification UI**: Interactive update badge, release notes preview drawer, and 1-click update command snippet helper directly in the dashboard sidebar.
+- **Automated CLI Build Scaffolding**: Dedicated CLI packaging scripts (`cli/scripts/build-cli.js`) and GitHub Actions release workflows (`release.yml`).
 
-## Features
+### Unified Dashboard Guard, Security & Tunnel Access Control
 
-- **Fetch**: add Ollama Cloud web fetch provider
-- **Gemini / Antigravity**: add Gemini 3.8 Flash support and bump IDE fingerprint to 2.11.0
-- **Claude**: add Claude Fable 5.1 support (adaptive thinking with `output_config.effort`), bump Claude Code fingerprint to 2.1.258 for new-model access
-- **Providers**: add client-side status filter (All / Active / Inactive / No connection) on the Providers dashboard; add max height and scroll for connection list
-- **Providers & Models**: streamline tokenrouter model catalog down to 22 flagship/newest models and add missing provider icons; refresh Codebuddy-CN catalog (add hy4-preview/hy3/glm-5.3/kimi-k3-1, drop EOL glm-5.0/glm-4.7)
-- **Models**: capability toggles (vision, reasoning) when adding custom models with upsert and live caps refresh
-- **CLI tools**: support saving and managing custom API key presets
-- **Quota**: add usage and rate-limit tracking for Groq via `x-ratelimit-*` headers
-- **i18n**: complete Indonesian translation (1391 keys)
+- **Centralized Security Gateway (`dashboardGuard.js`)**: Unified middleware for request authentication, local-only route enforcement, and tunnel access gating.
+- **Strict Local-Only Route Enforcement**: Enforced strict loopback verification (`LOCAL_ONLY_PATHS`) on sensitive spawn and management routes (`/api/headroom/restart`, `/api/headroom/auto-setup`, `/api/headroom/extras`, `/api/headroom/update`, `/api/pxpipe/*`, `/api/skills/install`, `/api/plugins/hermes/update`).
+- **Tunnel API Restriction**: Blocked `/api/*` and `/responses` traffic coming through Cloudflare Tunnels / Tailscale when dashboard tunnel access is disabled.
+- **Automated Coverage Guard**: Added `scripts/check-local-only-coverage.mjs` to automated CI/test suites to prevent route drift.
 
-## Fixes
+### Session Skill Prompt Deduplication & Routing Precision
 
-- **Security**: close SSRF guard bypasses in `ssrfGuard.js` (alternate IPv6 encodings, hostname trailing dots, wildcard DNS resolution check, safe redirect handling) (#3714)
-- **Model markers**: strip the `[1m]` context marker Claude Code appends to model names (`claude-opus-5[1m]`) preventing model resolution failures (#3690)
-- **Claude**: drop `server_tool_use` blocks carrying foreign IDs to avoid Anthropic 400 rejections; never anchor cache breakpoints on `defer_loading` tools (#3567)
-- **Antigravity**: strike-break optimistic quota readings that keep 429ing by blocking the connection+model pair for 15m after 3 strikes (#3681); preserve client identity on model catalog requests (#3414)
-- **Auth**: protect root `/responses` rewrite requiring API key validation in dashboardGuard
-- **Chat & Docker**: return 503 Service Unavailable when all credentials are rate-limited; explicitly bundle `node-machine-id` into standalone Docker runtime image
-- **OpenCode**: route Muse Spark models to `/zen/v1/responses` and declare vision support; filter inactive free model
-- **Kiro**: preserve inline images as OpenAI-compatible `image_url` parts in OpenAI MITM; remove redundant top-level `systemPrompt` from payload
-- **Usage**: read Responses-shape `cached_tokens` in `extractUsageFromResponse` for non-streaming traffic
-- **Models**: support single model lookup with provider-prefixed IDs (e.g. `cc/claude-sonnet-5`)
-- **Translator**: route Gemini thinking through `reasoning_effort` on OpenAI-compatible wire; convert `prefixItems` and ensure array items in Gemini schema sanitizer
-- **UI**: apply persisted theme before first paint to prevent flash on reload; translate combo vision adapter label
+- **Per-Session Skill Cache (`cache.js`, `chat.js`)**: Intelligently tracks injected skill prompts per conversation session. Avoids repetitive skill prompt reinjection on subsequent turns, saving 15-30% context tokens on long multi-turn sessions while preserving full skill fidelity.
+- **Live Catalog & Codex Guards (`chatCore.js`, `codexModels.js`, `autoRouter.js`)**: Real-time validation guarding against invalid or deprecated model requests across providers.
+- **Kiro Protocol Integrity**: Strips redundant `systemPrompt` from payload on `kiro.dev` endpoints and safeguards terminal message fidelity.
+- **Failover Turn Optimization**: Strips overhead failover turns in `chat.js` to reduce round-trip latency.
+
+### Pluggable Agent Skills & Documentation
+
+- **Standardized Skill Suite**: Full standard agent skill registry including `9router-chat`, `9router-embeddings`, `9router-image`, `9router-stt`, `9router-tts`, `9router-video`, `9router-web-fetch`, `9router-web-search`, `caveman`, `commit-lint`, `hermes-toolkit`, `human-commit`, `human-handwritten`, `ponytail`, `taste-skill`, `watermarks-remover`.
+- **Agent Integration Standards**: Comprehensive `SKILL.md` documentation with YAML frontmatter, standardized metadata, and drop-in integration links for AI coding assistants (Claude Code, Cursor, Antigravity, OpenClaw, Codex).
+- **Landing Page & UI Components**: Modernized landing page components (`src/app/landing/`), navigation headers, interactive hero section, and comprehensive feature showcases.
+
+## 🔄 Upstream v0.5.65 Core Features & Fixes Synchronized
+
+### Features
+
+- **Fetch**: Add Ollama Cloud web fetch provider.
+- **Gemini / Antigravity**: Add Gemini 3.8 Flash support and bump IDE fingerprint to 2.11.0.
+- **Claude**: Add Claude Fable 5.1 support (adaptive thinking with `output_config.effort`), bump Claude Code fingerprint to 2.1.258 for new-model access.
+- **Providers**: Add client-side status filter (All / Active / Inactive / No connection) on the Providers dashboard; add max height and scroll for connection list.
+- **Providers & Models**: Streamline tokenrouter model catalog down to 22 flagship/newest models and add missing provider icons; refresh Codebuddy-CN catalog (add hy4-preview/hy3/glm-5.3/kimi-k3-1, drop EOL glm-5.0/glm-4.7).
+- **CLI Tools**: Support saving and managing custom API key presets.
+- **Quota**: Add usage and rate-limit tracking for Groq via `x-ratelimit-*` headers.
+- **i18n**: Complete Indonesian translation (1391 keys).
+
+### Fixes
+
+- **Security**: Close SSRF guard bypasses in `ssrfGuard.js` (alternate IPv6 encodings, hostname trailing dots, wildcard DNS resolution check, safe redirect handling) (#3714).
+- **Model Markers**: Strip the `[1m]` context marker Claude Code appends to model names (`claude-opus-5[1m]`) preventing model resolution failures (#3690).
+- **Claude**: Drop `server_tool_use` blocks carrying foreign IDs to avoid Anthropic 400 rejections; never anchor cache breakpoints on `defer_loading` tools (#3567).
+- **Antigravity**: Strike-break optimistic quota readings that keep 429ing by blocking the connection+model pair for 15m after 3 strikes (#3681); preserve client identity on model catalog requests (#3414).
+- **Auth**: Protect root `/responses` rewrite requiring API key validation in dashboardGuard.
+- **Chat & Docker**: Return 503 Service Unavailable when all credentials are rate-limited; explicitly bundle `node-machine-id` into standalone Docker runtime image.
+- **OpenCode**: Route Muse Spark models to `/zen/v1/responses` and declare vision support; filter inactive free model.
+- **Kiro**: Preserve inline images as OpenAI-compatible `image_url` parts in OpenAI MITM; remove redundant top-level `systemPrompt` from payload.
+- **Usage**: Read Responses-shape `cached_tokens` in `extractUsageFromResponse` for non-streaming traffic.
+- **Models**: Support single model lookup with provider-prefixed IDs (e.g. `cc/claude-sonnet-5`).
+- **Translator**: Route Gemini thinking through `reasoning_effort` on OpenAI-compatible wire; convert `prefixItems` and ensure array items in Gemini schema sanitizer.
+- **UI**: Apply persisted theme before first paint to prevent flash on reload; translate combo vision adapter label.
+
+---
 
 # v0.5.60-extended (2026-09-01)
 
