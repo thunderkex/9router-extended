@@ -379,6 +379,38 @@ function buildCliPackage() {
     process.exit(1);
   }
 
+  // Step 9: Generate build-info.json with MD5 checksum
+  console.log("9️⃣  Generating build-info.json with MD5 checksum...");
+  const crypto = require("crypto");
+  const hash = crypto.createHash("md5");
+
+  const buildIdPath = path.join(buildDistDir, "BUILD_ID");
+  if (fs.existsSync(buildIdPath)) {
+    hash.update(fs.readFileSync(buildIdPath));
+  }
+  const customServerDest = path.join(cliAppDir, "custom-server.js");
+  if (fs.existsSync(customServerDest)) {
+    hash.update(fs.readFileSync(customServerDest));
+  }
+  hash.update(targetVersion);
+  hash.update(Date.now().toString());
+
+  const buildMd5 = hash.digest("hex");
+  const buildInfo = {
+    version: targetVersion,
+    md5: buildMd5,
+    buildTime: new Date().toISOString(),
+  };
+
+  const buildInfoJson = JSON.stringify(buildInfo, null, 2) + "\n";
+  fs.writeFileSync(path.join(cliAppDir, "build-info.json"), buildInfoJson);
+  fs.writeFileSync(path.join(appDir, "build-info.json"), buildInfoJson);
+  const constantsDir = path.join(appDir, "src", "shared", "constants");
+  if (fs.existsSync(constantsDir)) {
+    fs.writeFileSync(path.join(constantsDir, "build-info.json"), buildInfoJson);
+  }
+  console.log(`✅ Generated build-info.json (md5: ${buildMd5})\n`);
+
   console.log("✨ CLI package build completed!");
   console.log(`📁 Output: ${cliAppDir}`);
 

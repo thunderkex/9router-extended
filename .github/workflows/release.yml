@@ -57,8 +57,11 @@ jobs:
           if [ -f "$TARBALL" ]; then
             cp "$TARBALL" 9router-extended.tgz
             cp "$TARBALL" 9router-latest.tgz
+            md5sum 9router-extended.tgz | awk '{print $1}' > 9router-extended.tgz.md5
+            md5sum 9router-latest.tgz | awk '{print $1}' > 9router-latest.tgz.md5
+            md5sum "$TARBALL" | awk '{print $1}' > "${TARBALL}.md5"
           fi
-          ls -la *.tgz
+          ls -la *.tgz *.md5
         shell: bash
 
       - name: Create or Update GitHub Release
@@ -89,16 +92,16 @@ jobs:
                 --title "9Router v$VERSION" \
                 --latest
             fi
-            gh release upload "$TAG_NAME" ./*.tgz --clobber
+            gh release upload "$TAG_NAME" ./*.tgz ./*.md5 --clobber
           else
             echo "Creating new release $TAG_NAME..."
             if [ -s release_notes.md ]; then
-              gh release create "$TAG_NAME" ./*.tgz \
+              gh release create "$TAG_NAME" ./*.tgz ./*.md5 \
                 --title "9Router v$VERSION" \
                 --notes-file release_notes.md \
                 --latest
             else
-              gh release create "$TAG_NAME" ./*.tgz \
+              gh release create "$TAG_NAME" ./*.tgz ./*.md5 \
                 --title "9Router v$VERSION" \
                 --generate-notes \
                 --latest

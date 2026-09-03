@@ -53,9 +53,30 @@ export default function Sidebar({ onClose }) {
   const [autoStartChoice, setAutoStartChoice] = useState(true);
   const [shutdownCountdown, setShutdownCountdown] = useState(0);
   const [enableTranslator, setEnableTranslator] = useState(false);
+  const [pkgManager, setPkgManager] = useState("npm");
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [checkStatus, setCheckStatus] = useState(null);
   const { copied, copy } = useCopyToClipboard(2000);
 
-  const INSTALL_CMD = updateInfo?.updateCmd || UPDATER_CONFIG.installCmdLatest;
+  const getInstallCmd = (pm = pkgManager) => {
+    if (updateInfo?.packageManagers?.[pm]) {
+      return updateInfo.packageManagers[pm];
+    }
+    const tarball = updateInfo?.tarballUrl || UPDATER_CONFIG.tarballUrl;
+    if (pm === "bun") return `bun add -g ${tarball}`;
+    if (pm === "pnpm") return `pnpm add -g ${tarball}`;
+    if (pm === "yarn") return `yarn global add ${tarball}`;
+    return `npm i -g ${tarball} --force`;
+  };
+
+  const INSTALL_CMD = getInstallCmd(pkgManager);
+
+  const handleSelectPkgManager = (pm) => {
+    setPkgManager(pm);
+    try {
+      localStorage.setItem("preferred_pkg_manager", pm);
+    } catch {}
+  };
 
   useEffect(() => {
     fetch("/api/settings")
@@ -77,12 +98,46 @@ export default function Sidebar({ onClose }) {
       .catch(() => {});
   }, []);
 
-  // Lazy check for new npm version on mount
+  const checkForUpdates = async (force = false) => {
+    setIsCheckingUpdate(true);
+    setCheckStatus(null);
+    try {
+      const res = await fetch(`/api/version${force ? "?force=true" : ""}`);
+      const data = await res.json();
+
+      if (data.defaultPkgManager) {
+        try {
+          const saved = localStorage.getItem("preferred_pkg_manager");
+          if (saved) setPkgManager(saved);
+          else setPkgManager(data.defaultPkgManager);
+        } catch {
+          setPkgManager(data.defaultPkgManager);
+        }
+      }
+
+      if (data.hasUpdate) {
+        setUpdateInfo(data);
+        if (force) setShowUpdateModal(true);
+      } else {
+        setUpdateInfo(null);
+        if (force) {
+          setCheckStatus("✓ Up to date");
+          setTimeout(() => setCheckStatus(null), 3500);
+        }
+      }
+    } catch {
+      if (force) {
+        setCheckStatus("Check failed");
+        setTimeout(() => setCheckStatus(null), 3500);
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  // Check version on mount
   useEffect(() => {
-    fetch("/api/version")
-      .then(res => res.json())
-      .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
-      .catch(() => {});
+    checkForUpdates(false);
   }, []);
 
   const isActive = (href) => {
@@ -100,13 +155,15 @@ export default function Sidebar({ onClose }) {
 
   const handleAutoUpdate = async () => {
     setIsAutoUpdating(true);
+    const cmd = getInstallCmd(pkgManager);
     try {
       const res = await fetch("/api/version/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          installCmd: INSTALL_CMD,
+          installCmd: cmd,
           autoStart: autoStartChoice,
+          packageManager: pkgManager,
         }),
       });
       const data = await res.json();
@@ -150,10 +207,6 @@ export default function Sidebar({ onClose }) {
     setShutdownCountdown(0);
   };
 
-  // Note: legacy updater poll removed. New flow: copy install cmd + shutdown server,
-  // user runs the command manually in another terminal.
-
-
   return (
     <>
       <aside className="flex w-72 flex-col border-r border-border-subtle bg-vibrancy backdrop-blur-xl transition-colors duration-300 min-h-full">
@@ -164,38 +217,86 @@ export default function Sidebar({ onClose }) {
           <div className="w-3 h-3 rounded-full bg-[#27C93F]" />
         </div>
 
-        {/* Logo */}
+        {/* Logo & Version */}
         <div className="px-6 py-4 flex flex-col gap-2">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="flex items-center justify-center size-9 rounded-[10px] bg-gradient-to-br from-brand-500 to-brand-700 shadow-[var(--shadow-warm)]">
-              <span className="material-symbols-outlined text-white text-[20px]">hub</span>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-semibold tracking-tight text-text-main">
-                {APP_CONFIG.name}
-              </h1>
-              <span className="text-xs text-text-muted">v{APP_CONFIG.version}</span>
-            </div>
-          </Link>
-          {updateInfo && (
-            <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
-              <span className="text-xs font-semibold text-green-600 dark:text-amber-500">
-                ↑ New version available: v{updateInfo.latestVersion}
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/dashboard" className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="flex items-center justify-center size-9 rounded-[10px] bg-gradient-to-br from-brand-500 to-brand-700 shadow-[var(--shadow-warm)] shrink-0">
+                <span className="material-symbols-outlined text-white text-[20px]">hub</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <h1 className="text-lg font-semibold tracking-tight text-text-main truncate">
+                  {APP_CONFIG.name}
+                </h1>
+                <span className="text-xs text-text-muted whitespace-nowrap">
+                  v{APP_CONFIG.version}
+                </span>
+              </div>
+            </Link>
+
+            {/* Sleek icon button for Check Update */}
+            <button
+              type="button"
+              onClick={() => checkForUpdates(true)}
+              disabled={isCheckingUpdate}
+              title={checkStatus || "Check for updates"}
+              className="size-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main hover:bg-surface-2 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              <span className={cn("material-symbols-outlined text-[16px]", isCheckingUpdate && "animate-spin text-primary")}>
+                {checkStatus === "✓ Up to date" ? "check_circle" : "sync"}
               </span>
-              <div className="flex items-center gap-2">
+            </button>
+          </div>
+
+          {checkStatus && (
+            <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium px-0.5">
+              {checkStatus}
+            </div>
+          )}
+
+          {updateInfo && (
+            <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-primary">
+                  ↑ {updateInfo.isRebuild
+                    ? `New build (v${updateInfo.latestVersion || APP_CONFIG.version})`
+                    : `Update v${updateInfo.latestVersion}`}
+                </span>
+                <div className="flex items-center gap-0.5 bg-surface-2 p-0.5 rounded-md">
+                  {["bun", "npm", "pnpm", "yarn"].map((pm) => (
+                    <button
+                      key={pm}
+                      type="button"
+                      onClick={() => handleSelectPkgManager(pm)}
+                      className={cn(
+                        "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase transition-all cursor-pointer",
+                        pkgManager === pm
+                          ? "bg-primary text-white shadow-xs"
+                          : "text-text-muted hover:text-text-main"
+                      )}
+                    >
+                      {pm}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
                 <button
+                  type="button"
                   onClick={() => setShowUpdateModal(true)}
-                  className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-semibold transition-colors cursor-pointer shrink-0"
                 >
-                  Update now
+                  Install update
                 </button>
                 <button
+                  type="button"
                   onClick={() => copy(INSTALL_CMD)}
                   title="Copy install command"
-                  className="flex-1 text-left hover:opacity-80 transition-opacity cursor-pointer min-w-0"
+                  className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-surface-2 hover:bg-surface-3 transition-colors cursor-pointer text-left"
                 >
-                  <code className="block text-[10px] text-green-600/80 dark:text-amber-400/70 font-mono truncate">
-                    {copied ? "✓ copied!" : INSTALL_CMD}
+                  <code className="block text-[10px] text-text-muted font-mono truncate">
+                    {copied ? "✓ Copied!" : INSTALL_CMD}
                   </code>
                 </button>
               </div>
@@ -405,10 +506,50 @@ export default function Sidebar({ onClose }) {
         onConfirm={handleAutoUpdate}
         title="Update 9Router Extended"
         message={
-          <div className="space-y-3">
-            <p>
-              Upgrade to v{updateInfo?.latestVersion || ""}? Click Update to automatically install the latest 9Router Extended release and relaunch.
+          <div className="space-y-3.5">
+            <p className="text-sm text-text-main">
+              {updateInfo?.isRebuild
+                ? `New build detected with updated changes (v${updateInfo?.latestVersion || APP_CONFIG.version}). Click Install Update to automatically update and relaunch.`
+                : `Upgrade to v${updateInfo?.latestVersion || ""}? Click Install Update to automatically update and relaunch.`}
             </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-text-muted mb-1.5">Package Manager:</label>
+              <div className="flex items-center gap-1.5 bg-surface-2 p-1 rounded-lg">
+                {["bun", "npm", "pnpm", "yarn"].map((pm) => (
+                  <button
+                    key={pm}
+                    type="button"
+                    onClick={() => handleSelectPkgManager(pm)}
+                    className={cn(
+                      "flex-1 py-1 rounded text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer text-center",
+                      pkgManager === pm
+                        ? "bg-primary text-white shadow-sm"
+                        : "text-text-muted hover:text-text-main hover:bg-surface-3"
+                    )}
+                  >
+                    {pm}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-text-muted mb-1">Command preview:</label>
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-2 border border-border-subtle">
+                <code className="text-xs font-mono text-primary flex-1 break-all select-all">
+                  {INSTALL_CMD}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => copy(INSTALL_CMD)}
+                  className="px-2 py-1 rounded bg-surface-3 hover:bg-surface-1 text-xs text-text-main font-medium cursor-pointer"
+                >
+                  {copied ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+
             <label className="flex items-center gap-2 text-xs text-text-muted bg-surface-2 p-2 rounded cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -420,7 +561,7 @@ export default function Sidebar({ onClose }) {
             </label>
           </div>
         }
-        confirmText={isAutoUpdating ? "Updating..." : "Auto Update"}
+        confirmText={isAutoUpdating ? "Updating..." : "Install Update"}
         cancelText="Cancel"
         variant="primary"
       />
@@ -433,6 +574,8 @@ export default function Sidebar({ onClose }) {
               latestVersion={updateInfo?.latestVersion}
               installCmd={INSTALL_CMD}
               copied={copied}
+              pkgManager={pkgManager}
+              onSelectPkgManager={handleSelectPkgManager}
               autoStartChoice={autoStartChoice}
               setAutoStartChoice={setAutoStartChoice}
               onCopyAndShutdown={handleCopyAndShutdown}
@@ -464,7 +607,7 @@ Sidebar.propTypes = {
   onClose: PropTypes.func,
 };
 
-function ManualUpdatePanel({ latestVersion, installCmd, copied, autoStartChoice, setAutoStartChoice, onCopyAndShutdown, onCancel, onAutoUpdate, isAutoUpdating, countdown, isDisconnected }) {
+function ManualUpdatePanel({ latestVersion, installCmd, copied, pkgManager, onSelectPkgManager, autoStartChoice, setAutoStartChoice, onCopyAndShutdown, onCancel, onAutoUpdate, isAutoUpdating, countdown, isDisconnected }) {
   const isCountingDown = countdown > 0;
   return (
     <div className="w-full max-w-lg rounded-xl bg-neutral-900/95 border border-white/10 p-6 text-white">
@@ -473,7 +616,7 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, autoStartChoice,
           <span className="material-symbols-outlined text-[24px]">system_update</span>
         </div>
         <div>
-          <h2 className="text-lg font-semibold">Update 9Router Extended{latestVersion ? ` to v${latestVersion}` : ""}</h2>
+          <h2 className="text-lg font-semibold">Update 9Router Extended{latestVersion ? ` (v${latestVersion})` : ""}</h2>
           <p className="text-xs text-white/60">
             {isDisconnected
               ? "Update in progress or server stopped."
@@ -483,6 +626,30 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, autoStartChoice,
           </p>
         </div>
       </div>
+
+      {onSelectPkgManager && (
+        <div className="mb-3">
+          <label className="block text-xs font-semibold text-white/70 mb-1.5">Package Manager:</label>
+          <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-lg">
+            {["bun", "npm", "pnpm", "yarn"].map((pm) => (
+              <button
+                key={pm}
+                type="button"
+                onClick={() => onSelectPkgManager(pm)}
+                disabled={isCountingDown || isAutoUpdating}
+                className={cn(
+                  "flex-1 py-1 rounded text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer text-center",
+                  pkgManager === pm
+                    ? "bg-amber-500 text-black shadow-sm"
+                    : "text-white/60 hover:text-white hover:bg-white/10"
+                )}
+              >
+                {pm}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <p className="text-sm text-white/80 mb-2">Install command:</p>
       <div className="w-full px-3 py-2 rounded bg-white/5 mb-4">
@@ -516,7 +683,7 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, autoStartChoice,
               {copied ? "✓ Copied" : "Copy & Shutdown"}
             </Button>
             <Button variant="primary" fullWidth onClick={onAutoUpdate} disabled={isCountingDown || isAutoUpdating}>
-              {isAutoUpdating ? "Updating..." : "1-Click Auto Update"}
+              {isAutoUpdating ? "Updating..." : `Install with ${pkgManager || "npm"}`}
             </Button>
           </div>
         </div>
@@ -529,6 +696,8 @@ ManualUpdatePanel.propTypes = {
   latestVersion: PropTypes.string,
   installCmd: PropTypes.string.isRequired,
   copied: PropTypes.bool,
+  pkgManager: PropTypes.string,
+  onSelectPkgManager: PropTypes.func,
   onCopyAndShutdown: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
   countdown: PropTypes.number,

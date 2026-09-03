@@ -42,7 +42,10 @@ describe("updateCheck utility suite", () => {
       expect(res).toEqual({
         currentVersion: "1.0.0",
         latestVersion: "1.1.0",
+        currentMd5: null,
+        latestMd5: null,
         hasUpdate: true,
+        isRebuild: false,
       });
     });
 
@@ -51,6 +54,30 @@ describe("updateCheck utility suite", () => {
       expect(buildResult("1.0.0", "1.0.0").hasUpdate).toBe(false);
       expect(buildResult("1.0.0", null).hasUpdate).toBe(false);
       expect(buildResult(null, "1.0.0").hasUpdate).toBe(false);
+    });
+
+    it("detects rebuild update when version is identical but MD5 differs", () => {
+      const res = buildResult("1.0.0", "1.0.0", "aaa111", "bbb222");
+      expect(res).toEqual({
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.0",
+        currentMd5: "aaa111",
+        latestMd5: "bbb222",
+        hasUpdate: true,
+        isRebuild: true,
+      });
+    });
+
+    it("returns hasUpdate false when version and MD5 are identical", () => {
+      const res = buildResult("1.0.0", "1.0.0", "aaa111", "aaa111");
+      expect(res).toEqual({
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.0",
+        currentMd5: "aaa111",
+        latestMd5: "aaa111",
+        hasUpdate: false,
+        isRebuild: false,
+      });
     });
   });
 
@@ -62,7 +89,10 @@ describe("updateCheck utility suite", () => {
       expect(res1).toEqual({
         currentVersion: "1.0.0",
         latestVersion: "2.0.0",
+        currentMd5: null,
+        latestMd5: null,
         hasUpdate: true,
+        isRebuild: false,
       });
       expect(mockResolver).toHaveBeenCalledTimes(1);
 
@@ -70,9 +100,29 @@ describe("updateCheck utility suite", () => {
       expect(res2).toEqual({
         currentVersion: "1.0.0",
         latestVersion: "2.0.0",
+        currentMd5: null,
+        latestMd5: null,
         hasUpdate: true,
+        isRebuild: false,
       });
       expect(mockResolver).toHaveBeenCalledTimes(1); // Cached
+    });
+
+    it("supports resolver returning object with version and md5", async () => {
+      const mockResolver = vi.fn().mockResolvedValue({
+        version: "1.0.0",
+        md5: "new-md5-hash-12345",
+      });
+
+      const res = await checkForUpdate("9router-extended", "1.0.0", mockResolver, 10000, "old-md5-hash-67890");
+      expect(res).toEqual({
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.0",
+        currentMd5: "old-md5-hash-67890",
+        latestMd5: "new-md5-hash-12345",
+        hasUpdate: true,
+        isRebuild: true,
+      });
     });
 
     it("keeps caches distinct for different keys", async () => {
@@ -93,7 +143,10 @@ describe("updateCheck utility suite", () => {
       expect(res).toEqual({
         currentVersion: "1.0.0",
         latestVersion: null,
+        currentMd5: null,
+        latestMd5: null,
         hasUpdate: false,
+        isRebuild: false,
       });
     });
   });

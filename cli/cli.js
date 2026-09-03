@@ -455,7 +455,25 @@ function isRestrictedEnvironment() {
   return null;
 }
 
-// Check if new version available, return latest version or null
+// Helper to get local build MD5 in CLI
+function getCliLocalMd5() {
+  const candidates = [
+    path.join(__dirname, "app", "build-info.json"),
+    path.join(__dirname, "build-info.json"),
+    path.join(getAppDataDir(), "build-info.json"),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const data = JSON.parse(fs.readFileSync(p, "utf8"));
+        if (data.md5) return String(data.md5).trim().toLowerCase();
+      }
+    } catch {}
+  }
+  return null;
+}
+
+// Check if new version or rebuild is available, return update object or null
 function checkForUpdate() {
   return new Promise((resolve) => {
     if (skipUpdate) {
@@ -474,26 +492,58 @@ function checkForUpdate() {
       }
     }, 8000);
 
-    const done = (version) => {
+    const done = (res) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(safetyTimeout);
       spinner.stop();
-      resolve(version);
+      resolve(res);
     };
 
-    const req = https.get(`https://registry.npmjs.org/${pkg.name}/latest`, { timeout: 3000 }, (res) => {
+    const localMd5 = getCliLocalMd5();
+    const repo = "thunderkex/9router-extended";
+
+    // Check GitHub release and .tgz.md5
+    const req = https.get(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: { "User-Agent": "9router-cli", Accept: "application/json" },
+      timeout: 3500
+    }, (res) => {
       let data = "";
       res.on("data", chunk => data += chunk);
       res.on("end", () => {
         try {
-          const latest = JSON.parse(data);
-          if (latest.version && compareVersions(latest.version, pkg.version) > 0) {
-            done(latest.version);
-          } else {
-            done(null);
+          let latestVersion = null;
+          let latestMd5 = null;
+
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const release = JSON.parse(data);
+            if (release.tag_name) latestVersion = release.tag_name.replace(/^v/i, "");
           }
-        } catch (e) {
+
+          if (latestVersion) {
+            const semverDiff = compareVersions(latestVersion, pkg.version);
+            if (semverDiff > 0) {
+              return done({ version: latestVersion, isRebuild: false });
+            }
+          }
+
+          // Fallback to npm registry check
+          const npmReq = https.get(`https://registry.npmjs.org/${pkg.name}/latest`, { timeout: 3000 }, (npmRes) => {
+            let npmData = "";
+            npmRes.on("data", c => npmData += c);
+            npmRes.on("end", () => {
+              try {
+                const latest = JSON.parse(npmData);
+                if (latest.version && compareVersions(latest.version, pkg.version) > 0) {
+                  return done({ version: latest.version, isRebuild: false });
+                }
+              } catch {}
+              done(null);
+            });
+          });
+          npmReq.on("error", () => done(null));
+          npmReq.on("timeout", () => { npmReq.destroy(); done(null); });
+        } catch {
           done(null);
         }
       });
@@ -567,8 +617,16 @@ async function showInterfaceMenu(latestVersion) {
 
   const menuItems = [];
 
-  if (latestVersion) {
-    menuItems.push({ label: `Update to v${latestVersion} (current: v${pkg.version})`, icon: "⬆" });
+  const updateInfo = typeof latestVersion === "object" && latestVersion !== null
+    ? latestVersion
+    : (latestVersion ? { version: latestVersion, isRebuild: false } : null);
+
+  if (updateInfo) {
+    if (updateInfo.isRebuild) {
+      menuItems.push({ label: `Update build (v${updateInfo.version || pkg.version} - new build available)`, icon: "⬆" });
+    } else {
+      menuItems.push({ label: `Update to v${updateInfo.version} (current: v${pkg.version})`, icon: "⬆" });
+    }
   }
 
   menuItems.push(
@@ -739,7 +797,12 @@ function startServer(updatePromise) {
           isShuttingDown = true;
           const { clearScreen } = require("./src/cli/utils/display");
           clearScreen();
-          console.log(`\n⬆  Update v${pkg.version} → v${latestVersion}\n`);
+          const updateInfo = typeof latestVersion === "object" && latestVersion !== null ? latestVersion : null;
+          if (updateInfo?.isRebuild) {
+            console.log(`\n⬆  Rebuild update for v${pkg.version} (new build available)\n`);
+          } else {
+            console.log(`\n⬆  Update v${pkg.version} → v${updateInfo?.version || latestVersion}\n`);
+          }
           console.log(`Run this after exit:\n`);
           console.log(`   \x1b[33m${INSTALL_CMD_LATEST}\x1b[0m\n`);
           cleanup();
