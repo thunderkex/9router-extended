@@ -124,8 +124,9 @@ const OAUTH_TEST_CONFIG = {
   },
   // Freebuff — same session endpoint the quota tracker uses. 200 (active
   // session) and 404 (no session, auth still good) both pass; 401 is a real
-  // auth failure. We must NOT POST — POST claims a session and burns the
-  // daily free quota, which a test button must never do.
+  // auth failure. 403 = country-blocked / banned — soft-pass with a warning so
+  // the connection isn't flagged dead. We must NOT POST — POST claims a
+  // session and burns the daily free quota, which a test button must never do.
   freebuff: {
     url: "https://www.codebuff.com/api/v1/freebuff/session",
     method: "GET",
@@ -135,7 +136,11 @@ const OAUTH_TEST_CONFIG = {
       Accept: "application/json",
       "User-Agent": "codebuff-cli/0.0.138",
     },
-    acceptStatuses: [404],
+    acceptStatuses: [403, 404],
+    softFailMessage: {
+      403: "Connected, but Freebuff is gated (403) — country blocked or account banned.",
+    },
+    refreshable: false,
   },
 };
 
