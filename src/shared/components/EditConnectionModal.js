@@ -9,7 +9,7 @@ import Badge from "@/shared/components/Badge";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS } from "@/shared/constants/providers";
 import Select from "@/shared/components/Select";
 
-export default function EditConnectionModal({ isOpen, connection, proxyPools, onSave, onClose }) {
+export default function EditConnectionModal({ isOpen, connection, proxyPools, onSave, onClose, assignedModelOptions }) {
   const [formData, setFormData] = useState({
     name: "",
     priority: 1,
@@ -23,6 +23,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
   });
   const [cloudflareData, setCloudflareData] = useState({ accountId: "" });
   const [region, setRegion] = useState("");
+  const [assignedModel, setAssignedModel] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [validating, setValidating] = useState(false);
@@ -47,6 +48,14 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       }
       if (connection.provider === "cloudflare-ai" && connection.providerSpecificData) {
         setCloudflareData({ accountId: connection.providerSpecificData.accountId || "" });
+      }
+      // Freebuff strict-model-assignment: load existing value (with legacy freebuffModel fallback).
+      if (connection.provider === "freebuff") {
+        const data = connection.providerSpecificData || {};
+        const existing = Object.prototype.hasOwnProperty.call(data, "assignedModel")
+          ? data.assignedModel
+          : data.freebuffModel;
+        setAssignedModel(existing || "");
       }
       // Load region for providers that support it (e.g. xiaomi-tokenplan)
       const providerCfg = AI_PROVIDERS?.[connection.provider];
@@ -167,6 +176,15 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
       if (isCloudflareAi) {
         updates.providerSpecificData = { accountId: cloudflareData.accountId };
       }
+      if (connection?.provider === "freebuff") {
+        const baseData = { ...(connection?.providerSpecificData || {}) };
+        if (assignedModel) {
+          baseData.assignedModel = assignedModel;
+        } else {
+          delete baseData.assignedModel;
+        }
+        updates.providerSpecificData = baseData;
+      }
       // Persist updated region for region-aware providers
       if (providerRegions && region) {
         updates.providerSpecificData = buildRegionSpecificData();
@@ -273,6 +291,16 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           />
         )}
 
+        {connection?.provider === "freebuff" && Array.isArray(assignedModelOptions) && assignedModelOptions.length > 0 && (
+          <Select
+            label="Assigned Model"
+            value={assignedModel}
+            onChange={(e) => setAssignedModel(e.target.value)}
+            options={[{ value: "", label: "— Unassigned —" }, ...assignedModelOptions.map((m) => ({ value: m.id, label: m.name || m.id }))]}
+            hint="Only used when Strict Model Assignment is enabled on the provider."
+          />
+        )}
+
         {!isCompatible && !isAzure && !isCloudflareAi && (
           <div className="flex items-center gap-3">
             <Button onClick={handleTest} variant="secondary" disabled={testing}>
@@ -312,5 +340,9 @@ EditConnectionModal.propTypes = {
   })),
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
+  assignedModelOptions: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+  })),
 };
 
