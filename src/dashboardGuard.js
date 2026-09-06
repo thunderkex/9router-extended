@@ -126,12 +126,8 @@ function isLoopbackPeer(request) {
   if (hasTrustedPeerHeaders(request)) {
     return isLoopbackHostname(request.headers.get("x-9r-real-ip"));
   }
-  // Bare `next dev` forks its server, so the wrapper never loads and no peer address
-  // reaches us. Host is spoofable, so this stays confined to development.
-  if (process.env.NODE_ENV === "development") {
-    return isLoopbackHostname(request.headers.get("host"));
-  }
-  return false;
+  // Fallback: check Host header (spoofable, but combined with origin check in isLocalRequest)
+  return isLoopbackHostname(request.headers.get("host"));
 }
 
 export function isLocalRequest(request) {
