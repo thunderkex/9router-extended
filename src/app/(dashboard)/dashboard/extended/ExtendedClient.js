@@ -194,7 +194,7 @@ export default function ExtendedClient() {
         // Check updates for all skills with sources (CLI and prompt skills)
         const trackableList = sk.filter((s) => s.version || s.hook === "install-cli" || ["caveman", "ponytail", "rtk", "commit-lint", "watermarks-remover", "taste-skill"].includes(s.id));
         for (const s of trackableList) {
-          fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(s.id)}`)
+          fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(s.id)}`, { credentials: "include" })
             .then((r) => r.ok ? r.json() : null)
             .then((up) => {
               if (up) {
@@ -300,7 +300,7 @@ export default function ExtendedClient() {
       });
       if (res.ok) {
         // Re-check update status
-        const upRes = await fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(skill.id)}`);
+        const upRes = await fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(skill.id)}`, { credentials: "include" });
         if (upRes.ok) {
           const up = await upRes.json();
           setCliUpdates((prev) => ({ ...prev, [skill.id]: up }));
