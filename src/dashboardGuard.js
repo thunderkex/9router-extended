@@ -59,7 +59,6 @@ const LOCAL_ONLY_PATHS = [
   "/api/headroom/stop",
   "/api/headroom/restart",
   "/api/headroom/auto-setup",
-  "/api/headroom/extras",
   "/api/headroom/update",
   "/api/headroom/proxy",
   "/api/plugins/hermes/install",
@@ -76,6 +75,13 @@ const LOCAL_ONLY_PATHS = [
   "/api/pxpipe/restart",
   "/api/pxpipe/update",
   "/api/skills/install",
+];
+
+// Mixed read/write routes: GET is a status read safe behind regular auth, but POST/DELETE
+// install/uninstall packages and must stay loopback-only. The dashboard pages call these
+// for status on mount, which used to 403 even for authenticated remote (tunnel) users.
+const LOCAL_ONLY_WRITE_PREFIXES = [
+  "/api/headroom/extras",
 ];
 
 // Require auth, but allow through if requireLogin is disabled
@@ -182,6 +188,11 @@ async function canAccessLocalOnlyRoute(request) {
   // For /api/plugins/*, allow authenticated remote access (VPS/production use case)
   const pathname = request.nextUrl.pathname;
   if (pathname.startsWith("/api/plugins/") && isAuth) return true;
+
+  // For /api/skills/install, allow authenticated remote access (VPS/production use case).
+  // Skills are user-initiated installs from the dashboard; a VPS admin already has shell
+  // access, so the loopback gate isn't adding real protection — only blocking the UI.
+  if (pathname.startsWith("/api/skills/install") && isAuth) return true;
   
   // Allow password header for backup/restore (x-9r-password)
   const passwordHeader = request.headers.get("x-9r-password");
@@ -259,6 +270,18 @@ export async function proxy(request) {
   if (LOCAL_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
     if (!(await canAccessLocalOnlyRoute(request))) {
       console.warn(`[guard] Local-only rejection for route: ${pathname}`);
+      return NextResponse.json({ error: "Local only: CLI token required" }, { status: 403 });
+    }
+  }
+
+  // Mixed read/write routes: only block mutating methods. GET/HEAD fall through to the
+  // standard /api/* auth check, so authenticated remote users can read status without 403.
+  if (
+    LOCAL_ONLY_WRITE_PREFIXES.some((p) => pathname.startsWith(p)) &&
+    !["GET", "HEAD"].includes(request.method)
+  ) {
+    if (!(await canAccessLocalOnlyRoute(request))) {
+      console.warn(`[guard] Local-only rejection for ${request.method} ${pathname}`);
       return NextResponse.json({ error: "Local only: CLI token required" }, { status: 403 });
     }
   }
