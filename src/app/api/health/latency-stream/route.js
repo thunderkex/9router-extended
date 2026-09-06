@@ -28,12 +28,12 @@ export async function GET() {
         }
       }
 
-      function onUpdate() {
-        send(getProviderHealthSnapshot());
+      async function onUpdate() {
+        send(await getProviderHealthSnapshot());
       }
 
       // Initial snapshot
-      send(getProviderHealthSnapshot());
+      send(await getProviderHealthSnapshot());
 
       healthEmitter.on("update", onUpdate);
 

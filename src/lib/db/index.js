@@ -29,6 +29,13 @@ export {
   createProxyPool, updateProxyPool, deleteProxyPool,
 } from "./repos/proxyPoolsRepo.js";
 
+// Proxy pool fitness
+export {
+  listProxyPoolFitness, upsertProxyPoolFitness,
+  deleteProxyPoolFitness, clearProxyPoolFitness,
+  deleteProxyPoolFitnessByPool,
+} from "./repos/proxyPoolFitnessRepo.js";
+
 // API keys
 export {
   getApiKeys, getApiKeyById, createApiKey, updateApiKey, deleteApiKey, validateApiKey,
