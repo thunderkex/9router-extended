@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   validateApiKey: vi.fn(),
   getConsistentMachineId: vi.fn(),
   verifyDashboardAuthToken: vi.fn(),
+  verifyDashboardPassword: vi.fn(),
 }));
 
 vi.mock("next/server", () => ({
@@ -31,6 +32,7 @@ vi.mock("@/shared/utils/machineId", () => ({
 
 vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
+  verifyDashboardPassword: mocks.verifyDashboardPassword,
 }));
 
 vi.mock("@/lib/auth/trustedPeer", () => ({
@@ -231,6 +233,7 @@ describe("dashboard guard local-only access", () => {
     mocks.validateApiKey.mockResolvedValue(false);
     mocks.getConsistentMachineId.mockResolvedValue("cli-token");
     mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+    mocks.verifyDashboardPassword.mockResolvedValue(false);
   });
 
   it("rejects local-only route from non-loopback host without CLI token", async () => {
@@ -374,6 +377,31 @@ describe("dashboard guard local-only access", () => {
     const response = await proxy(req);
 
     expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("allows local-only route with valid password header (backup/restore)", async () => {
+    mocks.verifyDashboardPassword.mockResolvedValue(true);
+
+    const response = await proxy(localRequest("/api/settings/database", {
+      host: "localhost:20128",
+      origin: "http://localhost:20128",
+      "x-9r-password": "valid-password",
+    }));
+
+    expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("rejects local-only route with invalid password header", async () => {
+    mocks.verifyDashboardPassword.mockResolvedValue(false);
+
+    const response = await proxy(localRequest("/api/settings/database", {
+      host: "localhost:20128",
+      origin: "http://localhost:20128",
+      "x-9r-password": "wrong-password",
+    }));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Local only: CLI token required");
   });
 });
 

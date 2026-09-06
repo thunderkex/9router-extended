@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, Button, Badge, Input } from "@/shared/components";
 
+// Helper: auto-add credentials for LOCAL_ONLY_PATHS auth
+const hermesApi = (url, opts = {}) =>
+  fetch(url, { ...opts, credentials: "include", headers: { ...opts.headers } });
+
 export default function HermesPluginCard() {
   const [status, setStatus] = useState({
     installed: false,
@@ -49,7 +53,7 @@ export default function HermesPluginCard() {
   const fetchTelegramConfig = useCallback(async () => {
     setTelegramLoading(true);
     try {
-      const res = await fetch("/api/plugins/hermes/telegram");
+      const res = await hermesApi("/api/plugins/hermes/telegram");
       if (res.ok) {
         const data = await res.json();
         setTelegramConfig(data);
@@ -67,7 +71,7 @@ export default function HermesPluginCard() {
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const res = await fetch("/api/plugins/hermes/telegram", {
+      const res = await hermesApi("/api/plugins/hermes/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...telegramConfig, autoRestart: true }),
@@ -94,7 +98,7 @@ export default function HermesPluginCard() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/plugins/hermes/status");
+      const res = await hermesApi("/api/plugins/hermes/status");
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -108,7 +112,7 @@ export default function HermesPluginCard() {
 
   const checkUpdate = useCallback(async () => {
     try {
-      const res = await fetch("/api/plugins/update-check?plugin=hermes");
+      const res = await hermesApi("/api/plugins/update-check?plugin=hermes");
       if (res.ok) {
         const data = await res.json();
         setUpdateInfo(data);
@@ -127,7 +131,7 @@ export default function HermesPluginCard() {
     setLogsText("Updating Hermes Agent...\n");
 
     try {
-      const res = await fetch("/api/plugins/hermes/update", { method: "POST" });
+      const res = await hermesApi("/api/plugins/hermes/update", { method: "POST" });
       const data = await res.json();
       if (res.ok && data.success) {
         setSuccessMsg("Hermes Agent updated successfully.");
@@ -146,7 +150,7 @@ export default function HermesPluginCard() {
 
   const fetchDashboardStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/plugins/hermes/dashboard");
+      const res = await hermesApi("/api/plugins/hermes/dashboard");
       if (res.ok) {
         const data = await res.json();
         setDashboardStatus(data);
@@ -159,9 +163,9 @@ export default function HermesPluginCard() {
     (async () => {
       try {
         const [statusRes, tgRes, dashRes] = await Promise.all([
-          fetch("/api/plugins/hermes/status"),
-          fetch("/api/plugins/hermes/telegram"),
-          fetch("/api/plugins/hermes/dashboard"),
+          hermesApi("/api/plugins/hermes/status"),
+          hermesApi("/api/plugins/hermes/telegram"),
+          hermesApi("/api/plugins/hermes/dashboard"),
         ]);
         if (statusRes.ok && mounted) {
           const data = await statusRes.json();
@@ -184,13 +188,13 @@ export default function HermesPluginCard() {
     })();
 
     const timer = setInterval(() => {
-      fetch("/api/plugins/hermes/status")
+      hermesApi("/api/plugins/hermes/status")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && mounted) setStatus(data);
         })
         .catch(() => {});
-      fetch("/api/plugins/hermes/dashboard")
+      hermesApi("/api/plugins/hermes/dashboard")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && mounted) setDashboardStatus(data);
@@ -221,7 +225,7 @@ export default function HermesPluginCard() {
     setLogsText("Initiating official Hermes Agent installation...\n");
 
     // Trigger install in background
-    fetch("/api/plugins/hermes/install", { method: "POST" })
+    hermesApi("/api/plugins/hermes/install", { method: "POST" })
       .then(async (res) => {
         const data = await res.json();
         if (res.ok) {
@@ -241,8 +245,8 @@ export default function HermesPluginCard() {
     const pollLogs = setInterval(async () => {
       try {
         const [logsRes, statusRes] = await Promise.all([
-          fetch("/api/plugins/hermes/logs?type=install&lines=200"),
-          fetch("/api/plugins/hermes/status"),
+          hermesApi("/api/plugins/hermes/logs?type=install&lines=200"),
+          hermesApi("/api/plugins/hermes/status"),
         ]);
         if (logsRes.ok) {
           const lData = await logsRes.json();
@@ -265,7 +269,7 @@ export default function HermesPluginCard() {
     setActionInProgress(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/plugins/hermes/start", {
+      const res = await hermesApi("/api/plugins/hermes/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ args: ["gateway"] }),
@@ -287,7 +291,7 @@ export default function HermesPluginCard() {
     setActionInProgress(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/plugins/hermes/stop", { method: "POST" });
+      const res = await hermesApi("/api/plugins/hermes/stop", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         fetchStatus();
@@ -305,7 +309,7 @@ export default function HermesPluginCard() {
     setActionInProgress(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/plugins/hermes/restart", {
+      const res = await hermesApi("/api/plugins/hermes/restart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ args: ["gateway"] }),
@@ -327,7 +331,7 @@ export default function HermesPluginCard() {
     setLaunchingDashboard(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/plugins/hermes/dashboard", {
+      const res = await hermesApi("/api/plugins/hermes/dashboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
@@ -355,7 +359,7 @@ export default function HermesPluginCard() {
     setLaunchingDashboard(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/plugins/hermes/dashboard", {
+      const res = await hermesApi("/api/plugins/hermes/dashboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "stop" }),
@@ -379,7 +383,7 @@ export default function HermesPluginCard() {
     setShowLogsModal(true);
     setLogsLoading(true);
     try {
-      const res = await fetch(`/api/plugins/hermes/logs?type=${type}&lines=150`);
+      const res = await hermesApi(`/api/plugins/hermes/logs?type=${type}&lines=150`);
       if (res.ok) {
         const data = await res.json();
         setLogsText(data.logs || "No logs available.");
