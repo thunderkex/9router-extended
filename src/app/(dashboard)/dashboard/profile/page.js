@@ -706,7 +706,7 @@ export default function ProfilePage() {
 
       const res = await fetch("/api/settings/database", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-9r-password": password },
         body: JSON.stringify({ ...payload, password }),
       });
 
