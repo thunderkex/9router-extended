@@ -122,6 +122,21 @@ const OAUTH_TEST_CONFIG = {
       402: "Connected, but Grok Build credits are exhausted (spending limit). Add credits or upgrade SuperGrok.",
     },
   },
+  // Freebuff — same session endpoint the quota tracker uses. 200 (active
+  // session) and 404 (no session, auth still good) both pass; 401 is a real
+  // auth failure. We must NOT POST — POST claims a session and burns the
+  // daily free quota, which a test button must never do.
+  freebuff: {
+    url: "https://www.codebuff.com/api/v1/freebuff/session",
+    method: "GET",
+    authHeader: "Authorization",
+    authPrefix: "Bearer ",
+    extraHeaders: {
+      Accept: "application/json",
+      "User-Agent": "codebuff-cli/0.0.138",
+    },
+    acceptStatuses: [404],
+  },
 };
 
 /**
