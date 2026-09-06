@@ -14,6 +14,7 @@ import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { translate } from "@/i18n/runtime";
 import { fetchSuggestedModels } from "@/shared/utils/providerModelsFetcher";
 import { getProviderCustomModelRows } from "@/shared/utils/providerCustomModels";
+import PROVIDER_REGISTRY from "open-sse/providers/registry/index.js";
 import ModelRow from "./ModelRow";
 import PassthroughModelsSection from "./PassthroughModelsSection";
 import CompatibleModelsSection from "./CompatibleModelsSection";
@@ -26,6 +27,8 @@ import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
 import FetchOpenRouterModelsModal from "./FetchOpenRouterModelsModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
+
+const FREEBUFF_MODELS = (PROVIDER_REGISTRY.find((r) => r.id === "freebuff")?.models || []).map((m) => ({ id: m.id, name: m.name }));
 
 const AUTO_PING_SETTINGS_KEYS = {
   claude: "claudeAutoPing",
@@ -67,6 +70,7 @@ export default function ProviderDetailPage() {
   const [bulkUpdatingProxy, setBulkUpdatingProxy] = useState(false);
   const [providerStrategy, setProviderStrategy] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("");
+  const [strictModelAssignment, setStrictModelAssignment] = useState(false);
   const [thinkingMode, setThinkingMode] = useState("auto");
   const [autoPing, setAutoPing] = useState({ enabled: false, connections: {} });
   const [suggestedModels, setSuggestedModels] = useState([]);
@@ -317,6 +321,7 @@ export default function ProviderDetailPage() {
       const override = (settingsData.providerStrategies || {})[providerId] || {};
       setProviderStrategy(override.fallbackStrategy || null);
       setProviderStickyLimit(override.stickyRoundRobinLimit != null ? String(override.stickyRoundRobinLimit) : "1");
+      setStrictModelAssignment(override.strictModelAssignment === true);
       // Load per-provider thinking config
       const thinkingCfg = (settingsData.providerThinking || {})[providerId] || {};
       setThinkingMode(thinkingCfg.mode || "auto");
@@ -407,6 +412,41 @@ export default function ProviderDetailPage() {
   const handleStickyLimitChange = (value) => {
     setProviderStickyLimit(value);
     saveProviderStrategy("round-robin", value);
+  };
+
+  // Strict model assignment (Freebuff): when on, each connection must be
+  // assigned to exactly one model — accounts whose assignedModel doesn't
+  // match the requested model are filtered out before account selection.
+  const saveStrictModelAssignment = async (enabled) => {
+    try {
+      const settingsRes = await fetch("/api/settings", { cache: "no-store" });
+      const settingsData = settingsRes.ok ? await settingsRes.json() : {};
+      const current = settingsData.providerStrategies || {};
+      const override = { ...(current[providerId] || {}) };
+      if (enabled) {
+        override.strictModelAssignment = true;
+      } else {
+        delete override.strictModelAssignment;
+      }
+      const updated = { ...current };
+      if (Object.keys(override).length === 0) {
+        delete updated[providerId];
+      } else {
+        updated[providerId] = override;
+      }
+      await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerStrategies: updated }),
+      });
+    } catch (error) {
+      console.log("Error saving strict model assignment:", error);
+    }
+  };
+
+  const handleStrictModelAssignmentToggle = (enabled) => {
+    setStrictModelAssignment(enabled);
+    saveStrictModelAssignment(enabled);
   };
 
   const saveThinkingConfig = async (mode) => {
@@ -1504,6 +1544,16 @@ export default function ProviderDetailPage() {
                   </div>
                 )}
               </div>
+              {/* Strict model assignment (Freebuff only) */}
+              {providerId === "freebuff" && (
+                <div className="flex flex-wrap items-center gap-2" title="Each account only serves its assigned model — prevents model_locked errors when one session is active.">
+                  <span className="text-xs text-text-muted font-medium">Strict Model Assignment</span>
+                  <Toggle
+                    checked={strictModelAssignment}
+                    onChange={handleStrictModelAssignmentToggle}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -1779,6 +1829,7 @@ export default function ProviderDetailPage() {
         proxyPools={proxyPools}
         onSave={handleUpdateConnection}
         onClose={() => setShowEditModal(false)}
+        assignedModelOptions={FREEBUFF_MODELS}
       />
       {isCompatible && (
         <EditCompatibleNodeModal

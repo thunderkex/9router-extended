@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   validateApiKey: vi.fn(),
   getConsistentMachineId: vi.fn(),
   verifyDashboardAuthToken: vi.fn(),
+  verifyDashboardPassword: vi.fn(),
 }));
 
 vi.mock("next/server", () => ({
@@ -31,6 +32,7 @@ vi.mock("@/shared/utils/machineId", () => ({
 
 vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
+  verifyDashboardPassword: mocks.verifyDashboardPassword,
 }));
 
 vi.mock("@/lib/auth/trustedPeer", () => ({
@@ -44,9 +46,10 @@ const { proxy, __test__ } = await import("../../src/dashboardGuard.js");
 
 const PEER_TOKEN = "peer-token-fixture";
 
-function request(pathname, headers = {}) {
+function request(pathname, headers = {}, { method = "GET" } = {}) {
   const normalizedHeaders = new Headers(headers);
   return {
+    method,
     nextUrl: { pathname, searchParams: new URL(`http://localhost${pathname}`).searchParams },
     headers: normalizedHeaders,
     cookies: { get: vi.fn(() => undefined) },
@@ -231,6 +234,7 @@ describe("dashboard guard local-only access", () => {
     mocks.validateApiKey.mockResolvedValue(false);
     mocks.getConsistentMachineId.mockResolvedValue("cli-token");
     mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+    mocks.verifyDashboardPassword.mockResolvedValue(false);
   });
 
   it("rejects local-only route from non-loopback host without CLI token", async () => {
@@ -299,14 +303,12 @@ describe("dashboard guard local-only access", () => {
     const routes = [
       "/api/headroom/restart",
       "/api/headroom/auto-setup",
-      "/api/headroom/extras",
       "/api/headroom/update",
       "/api/pxpipe/install",
       "/api/pxpipe/start",
       "/api/pxpipe/stop",
       "/api/pxpipe/restart",
       "/api/pxpipe/update",
-      "/api/skills/install",
       "/api/cli-tools/hermes-settings",
       "/api/plugins/hermes/update",
       "/api/version/update",
@@ -317,6 +319,37 @@ describe("dashboard guard local-only access", () => {
       const response = await proxy(request(r, { host: "router.example.com" }));
       expect(response.status, `Expected 403 for ${r}`).toBe(403);
     }
+  });
+
+  it("allows /api/skills/install from non-loopback with auth (VPS use case)", async () => {
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+
+    const req = request("/api/skills/install", { host: "router.example.com" });
+    req.cookies = { get: vi.fn(() => ({ value: "valid-jwt" })) };
+    const response = await proxy(req);
+
+    expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("blocks /api/skills/install from non-loopback without auth", async () => {
+    const response = await proxy(request("/api/skills/install", { host: "router.example.com" }));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Local only: CLI token required");
+  });
+
+  it("blocks mutating methods on read/write routes from non-loopback even with auth", async () => {
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+
+    const response = await proxy(request("/api/headroom/extras", { host: "router.example.com" }, { method: "POST" }));
+    expect(response.status).toBe(403);
+  });
+
+  it("allows GET on read/write routes from non-loopback with auth", async () => {
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+
+    const response = await proxy(request("/api/headroom/extras", { host: "router.example.com" }));
+    expect(response).toBe(mocks.nextResponse);
   });
 
   it("allows version update and shutdown routes from loopback when requireLogin=false", async () => {
@@ -374,6 +407,31 @@ describe("dashboard guard local-only access", () => {
     const response = await proxy(req);
 
     expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("allows local-only route with valid password header (backup/restore)", async () => {
+    mocks.verifyDashboardPassword.mockResolvedValue(true);
+
+    const response = await proxy(localRequest("/api/settings/database", {
+      host: "localhost:20128",
+      origin: "http://localhost:20128",
+      "x-9r-password": "valid-password",
+    }));
+
+    expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("rejects local-only route with invalid password header", async () => {
+    mocks.verifyDashboardPassword.mockResolvedValue(false);
+
+    const response = await proxy(localRequest("/api/settings/database", {
+      host: "localhost:20128",
+      origin: "http://localhost:20128",
+      "x-9r-password": "wrong-password",
+    }));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Local only: CLI token required");
   });
 });
 

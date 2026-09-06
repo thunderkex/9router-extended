@@ -18,6 +18,7 @@
 
 import { EventEmitter } from "node:events";
 import { rankModels, getBalancedTopModels, detectModelTier, MODEL_TIERS } from "./modelRanking.js";
+import { getProviderConnections } from "@/lib/db/repos/connectionsRepo.js";
 
 export const healthEmitter = new EventEmitter();
 healthEmitter.setMaxListeners(50);
@@ -156,10 +157,32 @@ export function isCircuitOpen(providerId) {
 
 /**
  * Get a snapshot of all provider health for SSE / dashboard.
+ * Merges connected providers from DB with health store so providers
+ * with zero traffic still appear as active.
  * @returns {{ providers: Record<string, object> }}
  */
-export function getProviderHealthSnapshot() {
+export async function getProviderHealthSnapshot() {
   const providers = {};
+  
+  // Start with connected providers from DB
+  try {
+    const connections = await getProviderConnections({ isActive: true });
+    for (const conn of connections) {
+      if (!conn.provider) continue;
+      providers[conn.provider] = {
+        emaLatency: 0,
+        successCount: 0,
+        failCount: 0,
+        successRate: null,
+        circuitState: "closed",
+        consecutiveFails: 0,
+      };
+    }
+  } catch (err) {
+    // Fail-open — DB read errors don't break SSE
+  }
+  
+  // Overlay health data from store
   for (const [id, h] of store) {
     const total = h.successCount + h.failCount;
     providers[id] = {

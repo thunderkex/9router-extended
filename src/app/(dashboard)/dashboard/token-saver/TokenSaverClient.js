@@ -515,7 +515,7 @@ export default function TokenSaverClient() {
           // Check updates for prompt/rule skills on Token Saver page
           const list = ["caveman", "ponytail", "rtk", "watermarks-remover"];
           for (const id of list) {
-            fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(id)}`)
+            fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(id)}`, { credentials: "include" })
               .then((r) => r.ok ? r.json() : null)
               .then((up) => {
                 if (up) setSkillsUpdates((prev) => ({ ...prev, [id]: up }));
@@ -534,7 +534,7 @@ export default function TokenSaverClient() {
 
   const checkHeadroomUpdate = async () => {
     try {
-      const res = await fetch("/api/plugins/update-check?plugin=headroom");
+      const res = await fetch("/api/plugins/update-check?plugin=headroom", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setHeadroomUpdateInfo(data);
@@ -563,7 +563,7 @@ export default function TokenSaverClient() {
 
   const checkPxpipeUpdate = async () => {
     try {
-      const res = await fetch("/api/plugins/update-check?plugin=pxpipe");
+      const res = await fetch("/api/plugins/update-check?plugin=pxpipe", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setPxpipeUpdateInfo(data);
@@ -580,7 +580,7 @@ export default function TokenSaverClient() {
         body: JSON.stringify({ id: skillId, action: "update" }),
       });
       if (res.ok) {
-        const upRes = await fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(skillId)}`);
+        const upRes = await fetch(`/api/plugins/update-check?plugin=${encodeURIComponent(skillId)}`, { credentials: "include" });
         if (upRes.ok) {
           const up = await upRes.json();
           setSkillsUpdates((prev) => ({ ...prev, [skillId]: up }));

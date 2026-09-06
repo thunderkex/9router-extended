@@ -19,6 +19,26 @@ function githubMonthlyResetMs(status, errorText, provider) {
 }
 
 /**
+ * Filter connections by their assigned model when strict-model-assignment is
+ * enabled (Freebuff only). Other providers pass through unchanged.
+ * Reads `providerStrategies[providerId].strictModelAssignment` from settings.
+ * If a connection has no `assignedModel` set, it's treated as unassigned and
+ * excluded under strict mode — admins must explicitly assign every account.
+ */
+export function filterConnectionsForModel(providerId, connections, model, settings = {}) {
+  const override = (settings.providerStrategies || {})[providerId] || {};
+  if (providerId !== "freebuff" || override.strictModelAssignment !== true || !model) {
+    return connections;
+  }
+  return connections.filter((connection) => {
+    const data = connection.providerSpecificData || {};
+    const hasAssigned = Object.prototype.hasOwnProperty.call(data, "assignedModel");
+    const assignedModel = hasAssigned ? data.assignedModel : data.freebuffModel;
+    return assignedModel === model;
+  });
+}
+
+/**
  * Get provider credentials from localDb
  * Filters out unavailable accounts and returns the selected account based on strategy
  * @param {string} provider - Provider name
@@ -72,6 +92,13 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const connections = await getProviderConnections({ provider: providerId, isActive: true });
     log.debug("AUTH", `${provider} | total connections: ${connections.length}, excludeIds: ${excludeSet.size > 0 ? [...excludeSet].join(",") : "none"}, model: ${model || "any"}`);
 
+    // Strict mode (Freebuff): when configured, hide any connection whose
+    // assigned model does not match the requested model. We only need to load
+    // settings when there's a real model target on a provider that has the
+    // strict-mode knob — other providers short-circuit inside the filter.
+    const settingsForStrict = (providerId === "freebuff" && model) ? await getSettings() : null;
+    const strictFilteredConnections = filterConnectionsForModel(providerId, connections, model, settingsForStrict || {});
+
     if (connections.length === 0) {
       log.warn("AUTH", `No credentials for ${provider}`);
       return null;
@@ -82,7 +109,9 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const antigravityQuotaCache = isAntigravity && model ? getAntigravityQuotaCache() : null;
 
     // Filter out model-locked, excluded, and Antigravity quota-exhausted connections.
-    const availableConnections = connections.filter(c => {
+    // Source from strictFilteredConnections so strict-model-assignment accounts
+    // that don't match the requested model never appear in the pool.
+    const availableConnections = strictFilteredConnections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
       // Antigravity: skip if live quota exhausted for this model

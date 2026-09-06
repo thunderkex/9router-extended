@@ -33,6 +33,7 @@ import p30 from "./fal-ai.js";
 import p31 from "./featherless.js";
 import p32 from "./firecrawl.js";
 import p33 from "./fireworks.js";
+import p124 from "./freebuff.js";
 import p34 from "./gemini-cli.js";
 import p35 from "./gemini.js";
 import p36 from "./github.js";
@@ -159,6 +160,7 @@ export default [
   p31,
   p32,
   p33,
+  p124,
   p34,
   p35,
   p36,
