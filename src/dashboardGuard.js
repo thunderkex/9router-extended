@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSettings, validateApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { verifyDashboardAuthToken } from "@/lib/auth/dashboardSession";
+import { verifyDashboardAuthToken, verifyDashboardPassword } from "@/lib/auth/dashboardSession";
 import { hasTrustedPeerHeaders } from "@/lib/auth/trustedPeer";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
@@ -176,8 +176,20 @@ async function canAccessPublicLlmApi(request) {
 
 async function canAccessLocalOnlyRoute(request) {
   if (await hasValidCliToken(request)) return true;
+  const isLocal = isLocalRequest(request);
+  const isAuth = await isAuthenticated(request);
+  console.log(`[guard] canAccessLocalOnlyRoute: isLocal=${isLocal}, isAuth=${isAuth}, path=${request.nextUrl.pathname}`);
+  
   // Browser on host: loopback Host + Origin (blocks tunnel/CSRF) + auth (JWT or requireLogin=false)
-  if (isLocalRequest(request) && await isAuthenticated(request)) return true;
+  if (isLocal && isAuth) return true;
+  
+  // For /api/plugins/*, allow authenticated remote access (VPS/production use case)
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith("/api/plugins/") && isAuth) return true;
+  
+  // Allow password header for backup/restore (x-9r-password)
+  const passwordHeader = request.headers.get("x-9r-password");
+  if (passwordHeader && await verifyDashboardPassword(passwordHeader)) return true;
   return false;
 }
 
@@ -264,6 +276,10 @@ export async function proxy(request) {
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) return NextResponse.next();
     if (await hasValidCliToken(request) || await isAuthenticated(request))
+      return NextResponse.next();
+    // Password header as fallback auth for sensitive endpoints (backup/restore).
+    const passwordHeader = request.headers.get("x-9r-password");
+    if (passwordHeader && (await verifyDashboardPassword(passwordHeader)))
       return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
