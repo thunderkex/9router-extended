@@ -314,6 +314,22 @@ export async function getUsageHistory(filter = {}) {
   }));
 }
 
+// Count distinct providers currently handling an in-flight request.
+// Reads the same in-memory pendingRequests tracker used by getActiveRequests() / UsageStats "Active Requests".
+// The `period` arg is accepted only for API symmetry — this metric is live, not period-scoped.
+export async function getActiveProvidersInPeriod(_period = "today") {
+  const providers = new Set();
+  for (const models of Object.values(pendingRequests.byAccount)) {
+    for (const [modelKey, count] of Object.entries(models)) {
+      if (count <= 0) continue;
+      const m = modelKey.match(/^(.*) \((.*)\)$/);
+      const provider = m ? m[2] : "unknown";
+      if (provider) providers.add(provider);
+    }
+  }
+  return providers.size;
+}
+
 function loadDaysInRange(adapter, maxDays) {
   if (maxDays == null) {
     return adapter.all(`SELECT dateKey, data FROM usageDaily`);
