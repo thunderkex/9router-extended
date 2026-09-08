@@ -1,5 +1,5 @@
 import pkg from "../../../../package.json" with { type: "json" };
-import { checkForUpdate, fetchGitHubExtendedLatest, clearPluginUpdateCache } from "@/lib/updateCheck.js";
+import { checkForUpdate, fetchGitHubExtendedLatest, clearPluginUpdateCache, getLocalAppMd5, getLocalBuildInfo } from "@/lib/updateCheck.js";
 import { UPDATER_CONFIG } from "@/shared/constants/config.js";
 
 const EXTENDED_REPO = UPDATER_CONFIG.githubRepo || "thunderkex/9router-extended";
@@ -25,11 +25,18 @@ export async function GET(request) {
   const defaultPkgManager = isBun ? "bun" : "npm";
   const updateCmd = packageManagers[defaultPkgManager];
 
+  const currentMd5 = getLocalAppMd5();
+  const localBuildInfo = getLocalBuildInfo();
+  // installTime is set by postinstall.js after npm install; fallback to buildTime
+  const localBuildTime = localBuildInfo?.installTime || localBuildInfo?.buildTime || null;
+
   const result = await checkForUpdate(
     "9router-extended",
     currentVersion,
     () => fetchGitHubExtendedLatest(EXTENDED_REPO),
-    force ? 0 : 3600000
+    force ? 0 : 3600000,
+    currentMd5,
+    localBuildTime
   );
 
   return Response.json({

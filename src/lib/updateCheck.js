@@ -50,8 +50,8 @@ export function compareVersions(a, b) {
 /**
  * Build update result checking both version and MD5.
  */
-export function buildResult(currentVersion, latestVersion, currentMd5 = null, latestMd5 = null) {
-  if (!currentVersion && !currentMd5) {
+export function buildResult(currentVersion, latestVersion, currentMd5 = null, latestMd5 = null, localBuildTime = null, remoteAssetUpdatedAt = null) {
+  if (!currentVersion && !currentMd5 && !localBuildTime) {
     return {
       currentVersion: currentVersion || null,
       latestVersion: latestVersion || null,
@@ -70,9 +70,14 @@ export function buildResult(currentVersion, latestVersion, currentMd5 = null, la
   const hasMd5 = Boolean(normCurrentMd5 && normLatestMd5);
   const isMd5Different = hasMd5 && normCurrentMd5 !== normLatestMd5;
 
+  // Detect rebuild: same version but remote asset was uploaded after local build
+  const hasTimestamp = Boolean(localBuildTime && remoteAssetUpdatedAt);
+  const isNewerAsset = hasTimestamp && new Date(remoteAssetUpdatedAt) > new Date(localBuildTime);
+
   // If higher version -> standard version upgrade
-  // If same version and both MD5s are provided but differ -> rebuild update
-  const isRebuild = Boolean(hasMd5 && isMd5Different && semverDiff === 0);
+  // If same version and MD5s differ -> rebuild
+  // If same version and remote asset is newer than local build -> rebuild
+  const isRebuild = Boolean(semverDiff === 0 && ((hasMd5 && isMd5Different) || isNewerAsset));
   const hasUpdate = isHigherVersion || isRebuild;
 
   return {
@@ -89,17 +94,19 @@ export function buildResult(currentVersion, latestVersion, currentMd5 = null, la
  * Check if an update is available with in-memory caching.
  * @param {string} key - plugin id, e.g. "9router-extended", "headroom", "pxpipe"
  * @param {string} currentVersion - installed version string
- * @param {() => Promise<string|object|null>} fetchLatest - resolver function returning version or { version, md5 }
+ * @param {() => Promise<string|object|null>} fetchLatest - resolver returning version or { version, md5?, assetUpdatedAt? }
  * @param {number} ttlMs - cache time to live (default 1h)
  * @param {string|null} currentMd5 - local build MD5 hash
+ * @param {string|null} localBuildTime - local build ISO timestamp from build-info.json
  */
-export async function checkForUpdate(key, currentVersion, fetchLatest, ttlMs = 3600000, currentMd5 = null) {
+export async function checkForUpdate(key, currentVersion, fetchLatest, ttlMs = 3600000, currentMd5 = null, localBuildTime = null) {
   const cached = cache.get(key);
   if (cached && Date.now() - cached.fetchedAt < ttlMs) {
     const val = cached.value;
     const latestVersion = typeof val === "object" && val !== null ? val.version : val;
     const latestMd5 = typeof val === "object" && val !== null ? val.md5 : null;
-    return buildResult(currentVersion, latestVersion, currentMd5, latestMd5);
+    const remoteAssetUpdatedAt = typeof val === "object" && val !== null ? val.assetUpdatedAt : null;
+    return buildResult(currentVersion, latestVersion, currentMd5, latestMd5, localBuildTime, remoteAssetUpdatedAt);
   }
 
   let latest = null;
@@ -116,8 +123,9 @@ export async function checkForUpdate(key, currentVersion, fetchLatest, ttlMs = 3
   const val = latest ?? cached?.value ?? null;
   const latestVersion = typeof val === "object" && val !== null ? val.version : val;
   const latestMd5 = typeof val === "object" && val !== null ? val.md5 : null;
+  const remoteAssetUpdatedAt = typeof val === "object" && val !== null ? val.assetUpdatedAt : null;
 
-  return buildResult(currentVersion, latestVersion, currentMd5, latestMd5);
+  return buildResult(currentVersion, latestVersion, currentMd5, latestMd5, localBuildTime, remoteAssetUpdatedAt);
 }
 
 /**
@@ -208,6 +216,31 @@ export async function fetchText(url, options = {}) {
 // ─── Local Build Info & MD5 Resolution ─────────────────────────────────────────
 
 let cachedLocalMd5 = null;
+let cachedLocalBuildInfo = undefined; // undefined = not yet read; null = read but not found
+
+const BUILD_INFO_PATHS = [
+  path.join(process.cwd(), "build-info.json"),
+  path.join(process.cwd(), "src", "shared", "constants", "build-info.json"),
+  path.join(process.cwd(), ".next-cli-build", "build-info.json"),
+  path.join(process.cwd(), "cli", "app", "build-info.json"),
+];
+
+export function getLocalBuildInfo() {
+  if (cachedLocalBuildInfo !== undefined) return cachedLocalBuildInfo;
+  for (const p of BUILD_INFO_PATHS) {
+    try {
+      if (fs.existsSync(p)) {
+        const content = JSON.parse(fs.readFileSync(p, "utf8"));
+        if (content && typeof content === "object") {
+          cachedLocalBuildInfo = content;
+          return cachedLocalBuildInfo;
+        }
+      }
+    } catch { /* continue */ }
+  }
+  cachedLocalBuildInfo = null;
+  return null;
+}
 
 export function getLocalAppMd5() {
   if (cachedLocalMd5) return cachedLocalMd5;
@@ -217,24 +250,11 @@ export function getLocalAppMd5() {
     return cachedLocalMd5;
   }
 
-  const candidatePaths = [
-    path.join(process.cwd(), "build-info.json"),
-    path.join(process.cwd(), "src", "shared", "constants", "build-info.json"),
-    path.join(process.cwd(), ".next-cli-build", "build-info.json"),
-    path.join(process.cwd(), "cli", "app", "build-info.json"),
-  ];
-
-  for (const p of candidatePaths) {
-    try {
-      if (fs.existsSync(p)) {
-        const content = JSON.parse(fs.readFileSync(p, "utf8"));
-        const hash = content.md5 || content.buildMd5;
-        if (hash && typeof hash === "string") {
-          cachedLocalMd5 = hash.trim().toLowerCase();
-          return cachedLocalMd5;
-        }
-      }
-    } catch { /* continue */ }
+  const info = getLocalBuildInfo();
+  const hash = info?.md5 || info?.buildMd5;
+  if (hash && typeof hash === "string") {
+    cachedLocalMd5 = hash.trim().toLowerCase();
+    return cachedLocalMd5;
   }
 
   return null;
@@ -272,8 +292,23 @@ export async function fetchGitHubReleaseLatest(repo) {
 }
 
 /**
- * Resolver for 9Router Extended checking latest version from GitHub release.
+ * Resolver for 9Router Extended checking latest version + MD5 from GitHub release.
  */
 export async function fetchGitHubExtendedLatest(repo = "thunderkex/9router-extended") {
-  return fetchGitHubReleaseLatest(repo);
+  const data = await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`);
+  const tag = data?.tag_name || null;
+  if (!tag) return fetchGitHubReleaseLatest(repo);
+
+  const version = tag.replace(/^v/i, "");
+
+  // Use asset upload timestamp to detect rebuilds (same version, new tgz uploaded).
+  // Compare against local buildTime from build-info.json.
+  let assetUpdatedAt = null;
+  const assets = data?.assets || [];
+  const tgzAsset = assets.find((a) => a.name === "9router-extended.tgz" || (a.name?.endsWith(".tgz") && a.name?.includes("extended")));
+  if (tgzAsset?.updated_at) {
+    assetUpdatedAt = tgzAsset.updated_at;
+  }
+
+  return assetUpdatedAt ? { version, assetUpdatedAt } : version;
 }
