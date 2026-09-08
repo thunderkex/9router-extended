@@ -30,6 +30,15 @@ import { getHermesSystemPromptBlock, HERMES_MEMORY_BYPASS_HEADER } from "@/lib/p
 import { triggerHermesExtraction } from "@/lib/plugins/hermes/extraction.js";
 import { record as healthRecord } from "@/lib/routing/health.js";
 import { incrementFailover, hasPriorFailover, markSkillInjected } from "@/lib/session/cache.js";
+import { getCombos } from "@/lib/localDb";
+import {
+  classifyRequest,
+  resolvePlanCombo,
+  resolveCodeCombo,
+  injectPlan,
+  stripPlanMarkersForClient,
+  CONDENSED_PLAN_PROMPT,
+} from "@/lib/autoPlanRouter.js";
 
 const CONTINUITY_NOTICE =
   "--- Failover Notice: Upstream model/account switched. Check prior turns for existing tool results before searching again. ---";
@@ -65,7 +74,7 @@ export async function handleChat(request, clientRawRequest = null) {
   // Claude Code marks a 1M-context request as `<model>[1m]`; the marker matches
   // no combo, alias or provider/model pair, so it must not reach resolution.
   // The capability travels in the anthropic-beta header, forwarded as-is.
-  const { model: modelStr, contextMarker } = stripModelContextMarker(body.model);
+  let { model: modelStr, contextMarker } = stripModelContextMarker(body.model);
   if (contextMarker) body.model = modelStr;
 
   // Request summary is emitted as the unified "▶" line in chatCore (has fmt/thinking/account)
@@ -104,6 +113,97 @@ export async function handleChat(request, clientRawRequest = null) {
   const userAgent = request?.headers?.get("user-agent") || "";
   const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
   if (bypassResponse) return bypassResponse.response || bypassResponse;
+
+  // Auto Plan-Then-Code Orchestration
+  const autoPlanBypass = request.headers.get("x-9router-auto-plan") === "off" || body._skipAutoPlan;
+  if (settings.autoPlanEnabled && !autoPlanBypass) {
+    try {
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const classification = await classifyRequest(messages, settings, {
+        handleSingleModelChat: (b, m, raw, req) => handleSingleModelChat(b, m, raw, req, apiKey),
+      });
+
+      if (classification.needsPlan) {
+        const allCombos = await getCombos();
+        const planCombo = resolvePlanCombo(allCombos, settings);
+
+        if (planCombo && Array.isArray(planCombo.models) && planCombo.models.length > 0) {
+          log.info("AUTO-PLAN", `Triggering architecture plan via combo "${planCombo.name}" (score ${classification.score})`);
+
+          // Clone messages and inject condensed plan instructions
+          const planMessages = [
+            { role: "system", content: CONDENSED_PLAN_PROMPT },
+            ...messages.filter((m) => m && m.role !== "system"),
+          ];
+
+          const planBody = {
+            ...body,
+            messages: planMessages,
+            max_tokens: settings.autoPlanMaxTokens || 800,
+            stream: false,
+            _skipAutoPlan: true,
+          };
+
+          const timeoutMs = settings.autoPlanTimeoutMs || 15000;
+          const planPromise = (async () => {
+            const planComboModels = await getComboModels(planCombo.name) || planCombo.models.map(m => typeof m === "string" ? m : m.id);
+            return handleComboChat({
+              body: planBody,
+              models: planComboModels,
+              handleSingleModel: (b, m) => handleSingleModelChat(b, m, null, request, apiKey),
+              log,
+              comboName: planCombo.name,
+              comboStrategy: "fallback",
+            });
+          })();
+
+          let planResponse = null;
+          try {
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Plan generation timeout")), timeoutMs));
+            planResponse = await Promise.race([planPromise, timeoutPromise]);
+          } catch (planErr) {
+            log.warn("AUTO-PLAN", `Plan generation timed out or failed (${planErr.message}), failing open`);
+          }
+
+          if (planResponse && planResponse.ok) {
+            let planText = "";
+            let planTokens = 0;
+            try {
+              const planJson = await planResponse.json();
+              planText = planJson.choices?.[0]?.message?.content || "";
+              planTokens = planJson.usage?.total_tokens || 0;
+            } catch {}
+
+            if (planText) {
+              log.info("AUTO-PLAN", `Plan generated successfully (${planTokens} tokens)`);
+              // Inject generated plan into original messages
+              body.messages = injectPlan(body.messages, planText);
+              // Store metadata for observability & logging
+              if (clientRawRequest) {
+                clientRawRequest.autoPlan = {
+                  triggered: true,
+                  succeeded: true,
+                  score: classification.score,
+                  planTokens,
+                  combo: planCombo.name,
+                };
+              }
+
+              // If manual code combo is configured, route to it
+              const codeCombo = resolveCodeCombo(allCombos, settings, modelStr);
+              if (codeCombo && codeCombo.name !== modelStr) {
+                log.info("AUTO-PLAN", `Routing code implementation to Combo "${codeCombo.name}"`);
+                modelStr = codeCombo.name;
+                body.model = codeCombo.name;
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      log.warn("AUTO-PLAN", `Auto-plan failed open: ${err.message}`);
+    }
+  }
 
   const requiredCapabilities = detectRequiredCapabilities(body);
 
@@ -447,6 +547,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       connectionId: credentials.connectionId,
       userAgent,
       apiKey,
+      autoPlan: clientRawRequest?.autoPlan || undefined,
       eccSkills: matchedSkills.length > 0 ? matchedSkills : undefined,
       ccFilterNaming: !!chatSettings.ccFilterNaming,
       rtkEnabled: !!chatSettings.rtkEnabled,

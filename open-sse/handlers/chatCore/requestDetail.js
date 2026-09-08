@@ -78,6 +78,7 @@ export function buildRequestDetail(base, overrides = {}) {
     response: base.response || {},
     pxpipe: base.pxpipe || undefined,
     eccSkills: base.eccSkills || undefined,
+    autoPlan: base.autoPlan || undefined,
     status: base.status || "success",
     ...overrides
   };

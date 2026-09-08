@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Card, Button, Toggle, Badge, Modal, Input, ConfigSlider, ConfirmModal } from "@/shared/components";
+import { Card, Button, Toggle, Badge, Modal, Input, Select, ConfigSlider, ConfirmModal } from "@/shared/components";
 import HermesPluginCard from "./components/HermesPluginCard";
 
 const DEFAULT_PRE_ROUTE_SCRIPT = `/**
@@ -175,17 +175,24 @@ export default function ExtendedClient() {
   const [updatingSkill, setUpdatingSkill] = useState(null);
   const [showHowToUseModal, setShowHowToUseModal] = useState(false);
   const [selectedSkillForGuide, setSelectedSkillForGuide] = useState(null);
+  const [combosList, setCombosList] = useState([]);
 
   const loadData = useCallback(async () => {
     try {
-      const [settingsRes, skillsRes, eccRes] = await Promise.all([
+      const [settingsRes, skillsRes, eccRes, combosRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/skills"),
         fetch("/api/skills/sync-ecc").catch(() => null),
+        fetch("/api/combos").catch(() => null),
       ]);
       if (settingsRes.ok) {
         const s = await settingsRes.json();
         setSettings(s);
+      }
+      if (combosRes && combosRes.ok) {
+        const c = await combosRes.json();
+        const list = Array.isArray(c) ? c : (Array.isArray(c?.combos) ? c.combos : []);
+        setCombosList(list);
       }
       if (skillsRes.ok) {
         const sk = await skillsRes.json();
@@ -565,6 +572,162 @@ export default function ExtendedClient() {
         )}
       </Card>
 
+      {/* Auto Plan-Then-Code Card */}
+      <Card className="p-6 space-y-5 border-amber-500/20 bg-surface">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-border pb-4">
+          <div className="space-y-1 flex-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="material-symbols-outlined text-amber-500 text-[22px]">architecture</span>
+              <h2 className="text-base font-semibold text-text-main">Auto Plan-Then-Code Orchestration</h2>
+              <Badge variant="warning" size="sm">Two-Stage Pipeline</Badge>
+            </div>
+            <p className="text-xs text-text-muted leading-relaxed">
+              Automatically detect architecture and multi-file building tasks. Runs a fast condensed plan stage via Plan Combo, injects structured &lt;PLAN&gt; steps, and executes with Code Combo. Zero latency &amp; 0 extra tokens on simple queries.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+            <Toggle
+              checked={!!settings.autoPlanEnabled}
+              onChange={() => {
+                const nextVal = !settings.autoPlanEnabled;
+                setSettings((prev) => ({ ...prev, autoPlanEnabled: nextVal }));
+                patchSetting({ autoPlanEnabled: nextVal });
+              }}
+            />
+          </div>
+        </div>
+
+        {settings.autoPlanEnabled && (
+          <div className="space-y-5 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-text-main">Mode</label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={settings.autoPlanMode !== "manual" ? "primary" : "outline"}
+                    onClick={() => {
+                      setSettings((prev) => ({ ...prev, autoPlanMode: "auto" }));
+                      patchSetting({ autoPlanMode: "auto" });
+                    }}
+                  >
+                    Auto (Best Claude Combo)
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={settings.autoPlanMode === "manual" ? "primary" : "outline"}
+                    onClick={() => {
+                      setSettings((prev) => ({ ...prev, autoPlanMode: "manual" }));
+                      patchSetting({ autoPlanMode: "manual" });
+                    }}
+                  >
+                    Manual Combos
+                  </Button>
+                </div>
+              </div>
+
+              {settings.autoPlanMode === "manual" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Select
+                    label="Plan Combo"
+                    value={settings.autoPlanComboId || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSettings((prev) => ({ ...prev, autoPlanComboId: val }));
+                      patchSetting({ autoPlanComboId: val });
+                    }}
+                    options={combosList.map((c) => ({ value: c.id, label: c.name }))}
+                    placeholder="Select Plan Combo"
+                  />
+                  <Select
+                    label="Code Combo"
+                    value={settings.autoCodeComboId || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSettings((prev) => ({ ...prev, autoCodeComboId: val }));
+                      patchSetting({ autoCodeComboId: val });
+                    }}
+                    options={combosList.map((c) => ({ value: c.id, label: c.name }))}
+                    placeholder="Select Code Combo"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <ConfigSlider
+                label="Complexity Threshold"
+                configKey="autoPlanComplexityThreshold"
+                value={settings.autoPlanComplexityThreshold !== undefined ? Number(settings.autoPlanComplexityThreshold) : 6}
+                min={1}
+                max={10}
+                step={1}
+                onChange={(val) => {
+                  setSettings((prev) => ({ ...prev, autoPlanComplexityThreshold: val }));
+                  patchSetting({ autoPlanComplexityThreshold: val });
+                }}
+              />
+              <div className="flex flex-col justify-center space-y-1 text-xs text-text-muted">
+                <div>• <span className="font-semibold text-text-main">1-3</span>: Aggressive — plans almost all multi-sentence code requests.</div>
+                <div>• <span className="font-semibold text-text-main">4-7</span>: Balanced (Default 6) — plans architectural &amp; multi-file builds.</div>
+                <div>• <span className="font-semibold text-text-main">8-10</span>: Conservative — triggers only on very explicit large-scale refactors.</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-surface-2/60 border border-border">
+                <div className="space-y-0.5 pr-2">
+                  <div className="text-xs font-semibold text-text-main">Smart Classify</div>
+                  <div className="text-[11px] text-text-muted">Uses tiny LLM check (~20 tokens) only for ambiguous scores.</div>
+                </div>
+                <Toggle
+                  checked={!!settings.autoPlanSmartClassify}
+                  onChange={() => {
+                    const nextVal = !settings.autoPlanSmartClassify;
+                    setSettings((prev) => ({ ...prev, autoPlanSmartClassify: nextVal }));
+                    patchSetting({ autoPlanSmartClassify: nextVal });
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg bg-surface-2/60 border border-border">
+                <div className="space-y-0.5 pr-2">
+                  <div className="text-xs font-semibold text-text-main">Show Plan in Response</div>
+                  <div className="text-[11px] text-text-muted">Stream generated plan block to client before code.</div>
+                </div>
+                <Toggle
+                  checked={!!settings.autoPlanShowInResponse}
+                  onChange={() => {
+                    const nextVal = !settings.autoPlanShowInResponse;
+                    setSettings((prev) => ({ ...prev, autoPlanShowInResponse: nextVal }));
+                    patchSetting({ autoPlanShowInResponse: nextVal });
+                  }}
+                />
+              </div>
+
+              <div className="flex flex-col justify-center p-3 rounded-lg bg-surface-2/60 border border-border space-y-1">
+                <label className="text-xs font-semibold text-text-main">Max Plan Tokens</label>
+                <Input
+                  type="number"
+                  min={200}
+                  max={4000}
+                  value={settings.autoPlanMaxTokens || 800}
+                  onChange={(e) => {
+                    const val = Number(e.target.value) || 800;
+                    setSettings((prev) => ({ ...prev, autoPlanMaxTokens: val }));
+                    patchSetting({ autoPlanMaxTokens: val });
+                  }}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+
       {/* Hermes Agent Managed Service Card */}
       <HermesPluginCard />
 
@@ -648,16 +811,14 @@ export default function ExtendedClient() {
                         </Button>
                       )}
                       <Toggle checked={isEnabled} onChange={() => handleSkillToggle(skill, !isEnabled)} />
-                      {skill.source === "custom" && (
-                        <button
-                          type="button"
-                          onClick={() => setSkillToDelete(skill)}
-                          className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Custom Skill"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSkillToDelete(skill)}
+                        className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
+                        title="Delete / Uninstall Skill"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
                     </div>
                   </div>
 

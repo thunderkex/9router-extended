@@ -117,6 +117,7 @@ async function flushToDatabase() {
             response: truncateField(item.response, config.maxJsonSize),
             pxpipe: item.pxpipe || undefined,
             eccSkills: item.eccSkills || undefined,
+            autoPlan: item.autoPlan || undefined,
           };
 
           db.run(

@@ -66,6 +66,15 @@ const DEFAULT_SETTINGS = {
   pxpipeTimeoutMs: 15000,
   tokenSaverEnabled: false,
   tokenSaverBudget: 80000, // approximate token budget for sliding-window trim
+  autoPlanEnabled: false,
+  autoPlanMode: "auto",
+  autoPlanComboId: null,
+  autoCodeComboId: null,
+  autoPlanComplexityThreshold: 6,
+  autoPlanSmartClassify: false,
+  autoPlanMaxTokens: 800,
+  autoPlanTimeoutMs: 15000,
+  autoPlanShowInResponse: false,
 };
 
 async function readRaw() {

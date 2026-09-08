@@ -290,15 +290,22 @@ export default function RequestDetailsTab() {
                     </td>
                     <td className="max-w-[260px] p-4 text-sm text-text-main">
                       <div className="truncate font-mono">{detail.model}</div>
-                      {detail.eccSkills && detail.eccSkills.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {detail.eccSkills.map((s, si) => (
-                            <span key={si} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20 font-mono">
-                              ⚡ {s.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {detail.autoPlan?.triggered ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30 font-medium">
+                            📐 Plan+Code ({detail.autoPlan.planTokens || 0} tok)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-surface-3 text-text-muted border border-black/5 dark:border-white/5 font-medium">
+                            Direct
+                          </span>
+                        )}
+                        {detail.eccSkills && detail.eccSkills.length > 0 && detail.eccSkills.map((s, si) => (
+                          <span key={si} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20 font-mono">
+                            ⚡ {s.name}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="max-w-[180px] truncate p-4 text-sm text-text-main">
                        <span className="font-medium">
@@ -421,6 +428,23 @@ export default function RequestDetailsTab() {
                 </span>
               </div>
             </div>
+
+            {selectedDetail.autoPlan?.triggered && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-[18px] text-amber-500">architecture</span>
+                  <span className="font-semibold text-sm text-text-main">Auto Plan-Then-Code Orchestration</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-500 font-medium">
+                    Plan+Code
+                  </span>
+                </div>
+                <div className="text-xs text-text-muted space-y-1">
+                  <div>Combo: <span className="font-mono text-text-main">{selectedDetail.autoPlan.combo || "auto"}</span></div>
+                  <div>Plan Tokens: <span className="font-mono text-text-main">{selectedDetail.autoPlan.planTokens || 0}</span></div>
+                  <div>Score: <span className="font-mono text-text-main">{selectedDetail.autoPlan.score || 0}</span></div>
+                </div>
+              </div>
+            )}
 
             {selectedDetail.eccSkills && selectedDetail.eccSkills.length > 0 && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
