@@ -181,10 +181,10 @@ async function canAccessLocalOnlyRoute(request) {
   const isLocal = isLocalRequest(request);
   const isAuth = await isAuthenticated(request);
   console.log(`[guard] canAccessLocalOnlyRoute: isLocal=${isLocal}, isAuth=${isAuth}, path=${request.nextUrl.pathname}`);
-  
+
   // Browser on host: loopback Host + Origin (blocks tunnel/CSRF) + auth (JWT or requireLogin=false)
   if (isLocal && isAuth) return true;
-  
+
   // For /api/plugins/*, allow authenticated remote access (VPS/production use case)
   const pathname = request.nextUrl.pathname;
   if (pathname.startsWith("/api/plugins/") && isAuth) return true;
@@ -193,7 +193,7 @@ async function canAccessLocalOnlyRoute(request) {
   // Skills are user-initiated installs from the dashboard; a VPS admin already has shell
   // access, so the loopback gate isn't adding real protection — only blocking the UI.
   if (pathname.startsWith("/api/skills/install") && isAuth) return true;
-  
+
   // Allow password header for backup/restore (x-9r-password)
   const passwordHeader = request.headers.get("x-9r-password");
   if (passwordHeader && await verifyDashboardPassword(passwordHeader)) return true;
@@ -233,12 +233,14 @@ function isViaBlockedTunnelHost(request, settings) {
   let tailscaleHost = "";
   try {
     if (settings.tunnelUrl) tunnelHost = new URL(settings.tunnelUrl).hostname.toLowerCase();
-  } catch {}
+  } catch { }
   try {
     if (settings.tailscaleUrl) tailscaleHost = new URL(settings.tailscaleUrl).hostname.toLowerCase();
-  } catch {}
+  } catch { }
   return (tunnelHost && host === tunnelHost) || (tailscaleHost && host === tailscaleHost);
 }
+// Shared with src/proxy.js — the mimo login branch must respect dashboard auth.
+export { isAuthenticated };
 
 export const __test__ = {
   isLocalRequest,
