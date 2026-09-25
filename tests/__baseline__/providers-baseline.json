@@ -1105,5 +1105,13 @@
     "baseUrl": "https://api.b.ai/v1/chat/completions",
     "validateUrl": "https://api.b.ai/v1/models",
     "format": "openai"
+  },
+  "tokenharbor": {
+    "baseUrl": "https://tokenharbor.ai/v1/chat/completions",
+    "validateUrl": "https://tokenharbor.ai/v1/models",
+    "retry": {
+      "429": 2
+    },
+    "format": "openai"
   }
 }

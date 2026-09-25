@@ -652,8 +652,7 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         const res = await fetchWithConnectionProxy("https://api.hyperbolic.xyz/v1/models", { headers: { Authorization: `Bearer ${connection.apiKey}` } }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
       }
-      // OpenAI-compatible aggregators. All standard Bearer + OpenAI shape, so the
-      // same /v1/models probe applies to each.
+      case "tokenharbor":
       case "dahl":
       case "atria":
       case "agnes":
