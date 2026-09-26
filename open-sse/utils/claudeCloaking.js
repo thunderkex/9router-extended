@@ -25,8 +25,23 @@ function deriveUuid(seed) {
 function generateFakeUserID(sessionId, apiKey) {
   const deviceId = apiKey ? createHash("sha256").update(`device:${apiKey}`).digest("hex") : randomBytes(32).toString("hex");
   const accountUuid = apiKey ? deriveUuid(`account:${apiKey}`) : randomUUID();
-  const sessionUuid = sessionId || randomUUID();
+  const cleanSessionId = typeof sessionId === "string" ? sessionId.replace(/^claude:/i, "").trim() : null;
+  const sessionUuid = cleanSessionId || randomUUID();
   return `{"device_id":"${deviceId}","account_uuid":"${accountUuid}","session_id":"${sessionUuid}"}`;
+}
+
+export function extractClaudeSessionIdFromUserId(userId) {
+  if (typeof userId !== "string" || !userId) return null;
+  if (userId[0] === "{") {
+    try {
+      const sid = JSON.parse(userId)?.session_id;
+      return typeof sid === "string" && sid ? sid.replace(/^claude:/i, "").trim() || null : null;
+    } catch {
+      return null;
+    }
+  }
+  const clean = userId.replace(/^claude:/i, "").trim();
+  return clean || null;
 }
 
 /**

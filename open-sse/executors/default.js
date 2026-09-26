@@ -7,6 +7,7 @@ import { buildClineHeaders } from "../shared/clineAuth.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
+import { extractClaudeSessionIdFromUserId } from "../utils/claudeCloaking.js";
 
 // Auth header descriptors — derived from registry transport.auth, fallback to hardcoded defaults.
 const BEARER = { combined: true, header: "Authorization", scheme: "bearer" };
@@ -170,6 +171,15 @@ export class DefaultExecutor extends BaseExecutor {
       headers["Anthropic-Beta"] = mergeAnthropicBeta(selectAnthropicBeta(model, body), clientBeta);
     } else if (this.provider === "anthropic" && clientBeta) {
       headers["Anthropic-Beta"] = mergeAnthropicBeta(headers["Anthropic-Beta"], clientBeta);
+    }
+
+    // Claude OAuth: align x-claude-code-session-id with metadata.user_id.session_id if missing
+    if (this.provider === "claude" && !headers["x-claude-code-session-id"]) {
+      const token = credentials?.accessToken || credentials?.apiKey || "";
+      if (token.includes("sk-ant-oat")) {
+        const sid = extractClaudeSessionIdFromUserId(body?.metadata?.user_id);
+        if (sid) headers["x-claude-code-session-id"] = sid;
+      }
     }
 
     // Strip first-party Claude Code identity headers for non-Anthropic anthropic-compatible upstreams
