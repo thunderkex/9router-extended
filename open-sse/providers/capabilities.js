@@ -425,21 +425,29 @@ export const PATTERN_CAPABILITIES = [
  *
  * @param {string[]} comboModels
  * @param {Object|null} [comboLookup] optional map of combo name → models array for nested resolution
+ * @param {Function|null} [resolveCaps] optional (fullId) → caps override. The synced model
+ *   catalog is server-only (it reads a file), so a browser-side resolution cannot see the
+ *   limits it supplies and silently falls back to the generic patterns below. Callers that
+ *   have the server's answer (/api/models, via useModelCaps) pass it here; it is merged over
+ *   the local tables, so fields it does not carry (tools, pdf, audio/video, thinking*) survive.
  * @param {number} [_depth] internal recursion depth guard
  * @returns {object|null} full capabilities object, or null for empty input
  */
-export function aggregateComboCapabilities(comboModels, comboLookup = null, _depth = 0) {
+export function aggregateComboCapabilities(comboModels, comboLookup = null, resolveCaps = null, _depth = 0) {
   if (!comboModels?.length || _depth > 6) return null;
   const allCaps = comboModels.map((fullId) => {
     // Nested combo: bare name (no slash) that exists in the lookup — recurse
     if (!fullId.includes("/") && comboLookup?.[fullId]) {
-      return aggregateComboCapabilities(comboLookup[fullId], comboLookup, _depth + 1)
+      return aggregateComboCapabilities(comboLookup[fullId], comboLookup, resolveCaps, _depth + 1)
+          ?? resolveCaps?.(fullId)
           ?? getCapabilitiesForModel(null, fullId);
     }
     const slash = fullId.indexOf("/");
     const provider = slash === -1 ? null : fullId.slice(0, slash);
     const model = slash === -1 ? fullId : fullId.slice(slash + 1);
-    return getCapabilitiesForModel(provider, model);
+    const local = getCapabilitiesForModel(provider, model);
+    const override = resolveCaps?.(fullId);
+    return override ? { ...local, ...override } : local;
   });
   const first = allCaps[0];
   return {

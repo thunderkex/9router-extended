@@ -877,7 +877,10 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
   const current = strategy.fallbackStrategy || "fallback";
   const judge = strategy.judgeModel || "";
   const isFusion = current === "fusion";
-  const comboCaps = aggregateComboCapabilities(combo.models, comboByName);
+  // The synced catalog is server-only, so resolving here would fall back to the
+  // generic patterns and under-report the limits. getCaps carries the server's
+  // answer for /api/models.
+  const comboCaps = aggregateComboCapabilities(combo.models, comboByName, getCaps);
 
   return (
     <Card padding="sm" className={`group ${selected ? "ring-1 ring-primary/40 bg-primary/[0.03]" : ""}`}>
@@ -907,7 +910,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                     <span>{model}</span>
                     <CapacityBadges caps={
                       comboByName[model]
-                        ? aggregateComboCapabilities(comboByName[model], comboByName)
+                        ? aggregateComboCapabilities(comboByName[model], comboByName, getCaps)
                         : getCaps?.(model)
                     } />
                   </code>
