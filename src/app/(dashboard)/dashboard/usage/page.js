@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { UsageStats, RequestLogger, CardSkeleton, SegmentedControl, Card } from "@/shared/components";
+import UsageStats from "@/shared/components/UsageStats";
 import RequestDetailsTab from "./components/RequestDetailsTab";
 
 const PERIODS = [
@@ -34,7 +35,7 @@ function UsageContent() {
 
   const [period, setPeriod] = useState(searchParams.get("period") || "today");
   const [liveStats, setLiveStats] = useState({ totalRequests: 0, activeProviders: 0, avgLatency: 0 });
-  
+
   // Live stats from health stream
   useEffect(() => {
     let eventSource;
@@ -110,7 +111,7 @@ function UsageContent() {
     params.set("tab", value);
     router.push(`/dashboard/usage?${params.toString()}`, { scroll: false });
   };
-  
+
   const handlePeriodChange = (newPeriod) => {
     setPeriod(newPeriod);
     const params = new URLSearchParams(searchParams);
@@ -171,11 +172,10 @@ function UsageContent() {
             <button
               key={t.value}
               onClick={() => handleTabChange(t.value)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-1.5 ${
-                activeTab === t.value
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-1.5 ${activeTab === t.value
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-text-muted hover:text-text-main hover:border-border hover:bg-surface-1/50"
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-base">{t.icon}</span>
               {t.label}

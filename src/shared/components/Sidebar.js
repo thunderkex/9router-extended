@@ -8,6 +8,7 @@ import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG, UPDATER_CONFIG } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import useSettingsStore from "@/store/settingsStore";
 import Button from "./Button";
 import { ConfirmModal } from "./Modal";
 import NineRemotePromoModal from "./NineRemotePromoModal";
@@ -75,14 +76,13 @@ export default function Sidebar({ onClose }) {
     setPkgManager(pm);
     try {
       localStorage.setItem("preferred_pkg_manager", pm);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
-    fetch("/api/settings")
-      .then(res => res.json())
-      .then(data => { if (data.enableTranslator) setEnableTranslator(true); })
-      .catch(() => {});
+    useSettingsStore.getState().fetchSettings().then((data) => {
+      if (data?.enableTranslator) setEnableTranslator(true);
+    });
   }, []);
 
   // Check auto-start state on mount
@@ -95,7 +95,18 @@ export default function Sidebar({ onClose }) {
           setAutoStartChoice(data.enabled);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
+  }, []);
+
+  // Lazy check for new npm version in background after initial render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetch("/api/version")
+        .then(res => res.json())
+        .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
+        .catch(() => { });
+    }, 2500);
+    return () => clearTimeout(timer);
   }, []);
 
   const checkForUpdates = async (force = false) => {
@@ -188,7 +199,7 @@ export default function Sidebar({ onClose }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enable: autoStartChoice }),
       });
-    } catch {}
+    } catch { }
     let remaining = UPDATER_CONFIG.shutdownCountdownSec;
     setShutdownCountdown(remaining);
     const timer = setInterval(() => {
@@ -196,7 +207,7 @@ export default function Sidebar({ onClose }) {
       setShutdownCountdown(remaining);
       if (remaining <= 0) {
         clearInterval(timer);
-        fetch("/api/version/shutdown", { method: "POST" }).catch(() => {});
+        fetch("/api/version/shutdown", { method: "POST" }).catch(() => { });
         setIsDisconnected(true);
       }
     }, 1000);
