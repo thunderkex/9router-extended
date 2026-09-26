@@ -184,6 +184,9 @@ export async function POST(request) {
       providerSpecificData: mergedProviderSpecificData,
       isActive: true,
       testStatus: testStatus || "unknown",
+      // POST with an id is an explicit edit of that connection; without one, a
+      // name collision is refused rather than silently overwriting a key. #4311
+      allowOverwrite: body.id ? true : (body.allowOverwrite === true || body.overwrite === true),
     });
 
     // Asynchronously probe models with minimal tokens to warm up cache & verify connectivity
@@ -195,6 +198,12 @@ export async function POST(request) {
 
     return NextResponse.json({ connection: result }, { status: 201 });
   } catch (error) {
+    if (error?.code === "PROVIDER_NAME_CONFLICT") {
+      return NextResponse.json(
+        { error: error.message, code: error.code, existingId: error.existingId, existingName: error.existingName },
+        { status: 409 }
+      );
+    }
     console.log("Error creating provider:", error);
     return NextResponse.json({ error: "Failed to create provider" }, { status: 500 });
   }
