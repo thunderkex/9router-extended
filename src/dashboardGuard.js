@@ -54,6 +54,7 @@ const LOCAL_ONLY_PATHS = [
   "/api/tunnel/update",
   "/api/oauth/cursor/auto-import",
   "/api/oauth/kiro/auto-import",
+  "/api/oauth/zed/auto-import",
   "/api/auth/reset-password",
   "/api/headroom/start",
   "/api/headroom/stop",
@@ -75,6 +76,8 @@ const LOCAL_ONLY_PATHS = [
   "/api/pxpipe/restart",
   "/api/pxpipe/update",
   "/api/skills/install",
+  "/api/cli-tools/cowork-settings",
+  "/api/cli-tools/antigravity-mitm",
 ];
 
 // Mixed read/write routes: GET is a status read safe behind regular auth, but POST/DELETE
