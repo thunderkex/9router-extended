@@ -7,6 +7,7 @@
  *   gateway; GLM/MiniMax/Kimi upstreams accept duplicates). First definition wins,
  *   tool_choice and message-history references are by name/id so nothing breaks.
  */
+import { isDeepSeekModel } from "../providers/models/helpers.js";
 
 const DEDUP_RULES = [
   {
@@ -33,12 +34,6 @@ function getToolName(t) {
 function matches(name, pattern) {
   if (typeof pattern === "string") return name === pattern;
   return pattern instanceof RegExp ? pattern.test(name) : false;
-}
-
-// "model(level)" is a 9router thinking override; strip before matching.
-function isDeepSeekModel(model) {
-  if (typeof model !== "string") return false;
-  return /^deepseek-/.test(model.replace(/\([^()]+\)\s*$/, "").trim());
 }
 
 /**
