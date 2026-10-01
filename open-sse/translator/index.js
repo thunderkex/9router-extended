@@ -1,6 +1,6 @@
 import { FORMATS } from "./formats.js";
 import { ensureToolCallIds, fixMissingToolResponses } from "./concerns/toolCall.js";
-import { prepareClaudeRequest } from "./formats/claude.js";
+import { prepareClaudeRequest, ensureTrailingUserTurn } from "./formats/claude.js";
 import { cloakClaudeTools, decloakStreamChunk } from "../utils/claudeCloaking.js";
 import { restoreToolNames } from "../utils/opencodeFingerprint.js";
 import { filterToOpenAIFormat } from "./formats/openai.js";
@@ -53,6 +53,8 @@ function stripContentTypes(body, stripList = []) {
 export function translateRequest(sourceFormat, targetFormat, model, body, stream = true, credentials = null, provider = null, reqLogger = null, stripList = [], connectionId = null, clientTool = null) {
   ensureInitialized();
   let result = body;
+  // Role the client actually ended on, before any translator drops an emptied turn.
+  const clientLastRole = Array.isArray(body?.messages) ? body.messages[body.messages.length - 1]?.role : undefined;
 
   // Strip explicit content types (opt-in via strip[] in PROVIDER_MODELS entry)
   stripContentTypes(result, stripList);
@@ -132,6 +134,7 @@ export function translateRequest(sourceFormat, targetFormat, model, body, stream
   if (targetFormat === FORMATS.CLAUDE) {
     const apiKey = credentials?.accessToken || credentials?.apiKey || null;
     result = prepareClaudeRequest(result, provider, apiKey, connectionId, credentials?.rawHeaders, clientSessionId);
+    if (Array.isArray(result?.messages)) result.messages = ensureTrailingUserTurn(result.messages, clientLastRole);
   }
 
   // Claude cloaking: rename client tools with CLAUDE_TOOL_SUFFIX (anti-ban)
