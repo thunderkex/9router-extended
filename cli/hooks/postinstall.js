@@ -5,6 +5,10 @@
 // cli.js will retry at runtime if anything is missing.
 const path = require("path");
 const fs = require("fs");
+// `npx 9router …` (npm_command=exec) is typically a one-shot `connect` — skip
+// the runtime warm-up; cli.js self-heals it if the server is started later.
+if (process.env.npm_command === "exec") process.exit(0);
+
 const { ensureSqliteRuntime } = require("./sqliteRuntime");
 const { ensureTrayRuntime } = require("./trayRuntime");
 
