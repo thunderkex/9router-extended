@@ -75,6 +75,8 @@ const DEFAULT_SETTINGS = {
   autoPlanMaxTokens: 800,
   autoPlanTimeoutMs: 15000,
   autoPlanShowInResponse: false,
+  // Per-provider user header overrides applied at dispatch: { [providerId]: { headers: {..} } }
+  providerOverrides: {},
 };
 
 async function readRaw() {

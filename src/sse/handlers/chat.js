@@ -173,7 +173,7 @@ export async function handleChat(request, clientRawRequest = null) {
               const planJson = await planResponse.json();
               planText = planJson.choices?.[0]?.message?.content || "";
               planTokens = planJson.usage?.total_tokens || 0;
-            } catch {}
+            } catch { }
 
             if (planText) {
               log.info("AUTO-PLAN", `Plan generated successfully (${planTokens} tokens)`);
@@ -572,6 +572,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       trimBudget: chatSettings.tokenSaverBudget || 80000,
       providerThinking,
       activeGenericPrompts,
+      // Per-provider user overrides (custom headers / connect timeout) from settings
+      providerOverrides: (chatSettings.providerOverrides || {})[provider] || null,
       // Detect source format by endpoint + body
       sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
       onCredentialsRefreshed: async (newCreds) => {
