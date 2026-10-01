@@ -175,7 +175,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           return;
         }
 
-        if (data.error === "expired_token" || data.error === "access_denied") {
+        if (data.error === "expired_token" || data.error === "access_denied" || data.fatal) {
           throw new Error(data.errorDescription || data.error);
         }
 
@@ -201,7 +201,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     const flow = flowRef.current;
     if (flow.proxyStarted && !flow.stopSent && flow.proxyProvider) {
       flow.stopSent = true;
-      fetch(`/api/oauth/${flow.proxyProvider}/stop-proxy`).catch(() => {});
+      fetch(`/api/oauth/${flow.proxyProvider}/stop-proxy`).catch(() => { });
     }
   }, []);
 
@@ -292,6 +292,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         "qoder-cn",
         "grok-cli",
         "freebuff",
+        "muse",
       ];
       if (deviceCodeProviders.includes(provider)) {
         setIsDeviceCode(true);
@@ -320,21 +321,21 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         // can persist the machine id alongside the token).
         const extraData = provider === "kiro"
           ? {
-              _clientId: data._clientId,
-              _clientSecret: data._clientSecret,
-              _region: data._region,
-              _authMethod: data._authMethod,
-              _startUrl: data._startUrl,
-            }
+            _clientId: data._clientId,
+            _clientSecret: data._clientSecret,
+            _region: data._region,
+            _authMethod: data._authMethod,
+            _startUrl: data._startUrl,
+          }
           : (provider === "qoder" || provider === "qoder-cn")
-          ? {
+            ? {
               _qoderNonce: data._qoderNonce,
               _qoderMachineId: data._qoderMachineId,
               _qoderVerifier: data.codeVerifier,
             }
-          : (provider === "kimi" || provider === "kimi-coding")
-          ? { _kimiDeviceId: data._kimiDeviceId }
-          : null;
+            : (provider === "kimi" || provider === "kimi-coding")
+              ? { _kimiDeviceId: data._kimiDeviceId }
+              : null;
         startPolling(
           data.device_code,
           data.codeVerifier,
@@ -533,7 +534,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       if (cancelled || callbackProcessedRef.current) return;
       attempts += 1;
       try {
-          const res = await fetch(`/api/oauth/${pollProvider}/poll-status?state=${encodeURIComponent(authData.state)}`);
+        const res = await fetch(`/api/oauth/${pollProvider}/poll-status?state=${encodeURIComponent(authData.state)}`);
         const data = await res.json();
         if (cancelled || callbackProcessedRef.current) return;
         if (data.status === "done") {
@@ -593,7 +594,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       const isLocalhost = event.origin.includes("localhost") || event.origin.includes("127.0.0.1");
       const isSameOrigin = event.origin === window.location.origin;
       if (!isLocalhost && !isSameOrigin) return;
-      
+
       if (event.data?.type === "oauth_callback") {
         handleCallback(event.data.data);
       }
@@ -873,7 +874,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                     ? "If xAI shows a code instead of redirecting, paste that code here."
                     : isKimchiProvider
                       ? "After authorization, copy the full callback URL or token from your browser."
-                    : "After authorization, copy the full URL from your browser."}
+                      : "After authorization, copy the full URL from your browser."}
                 </p>
                 <Input
                   value={callbackUrl}

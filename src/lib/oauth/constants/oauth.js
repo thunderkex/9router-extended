@@ -129,6 +129,9 @@ export const GROK_CLI_CONFIG = { ...PROVIDER_OAUTH["grok-cli"] };
 
 // Freebuff OAuth Configuration (Device Code Flow)
 export const FREEBUFF_CONFIG = { ...PROVIDER_OAUTH["freebuff"] };
+// Muse — subscription device code flow to auth.meta.com, no refresh
+// (Meta rejects refresh_token grants; the minted Model API key never expires).
+export const MUSE_CONFIG = { ...PROVIDER_OAUTH["muse"] };
 
 // Trae (ByteDance marscode) OAuth — authorization_code flow with local callback.
 //   1) POST GetLoginGuidance {loginTraceID} → {Result.LoginHost}

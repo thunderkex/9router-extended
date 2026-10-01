@@ -247,12 +247,12 @@ export async function GET(request, { params }) {
       const authMethod = searchParams.get("auth_method");
       const deviceOptions = provider === "kiro"
         ? {
-            ...(startUrl ? { startUrl } : {}),
-            ...(region ? { region } : {}),
-            ...(authMethod ? { authMethod } : {}),
-          }
+          ...(startUrl ? { startUrl } : {}),
+          ...(region ? { region } : {}),
+          ...(authMethod ? { authMethod } : {}),
+        }
         : undefined;
-      
+
       // Providers that don't use PKCE for device code (Grok CLI HAR: plain device_code, no challenge)
       const noPkceDeviceProviders = [
         "github",
@@ -266,6 +266,7 @@ export async function GET(request, { params }) {
         "qoder-cn",
         "grok-cli",
         "freebuff",
+        "muse",
       ];
       let deviceData;
       if (noPkceDeviceProviders.includes(provider)) {
@@ -425,7 +426,7 @@ export async function POST(request, { params }) {
           const b64 = code.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
           const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
           directPayload = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
-        } catch {}
+        } catch { }
 
         const accountId = info.chatgptAccountId || directPayload.account_id;
         const planType = info.chatgptPlanType || directPayload.plan_type;
@@ -474,14 +475,14 @@ export async function POST(request, { params }) {
         provider,
         authType: "oauth",
         ...tokenData,
-        expiresAt: tokenData.expiresIn 
-          ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString() 
+        expiresAt: tokenData.expiresIn
+          ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
           : null,
         testStatus: "active",
       });
 
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         connection: {
           id: connection.id,
           provider: connection.provider,
@@ -530,14 +531,14 @@ export async function POST(request, { params }) {
           provider: providerId,
           authType: "oauth",
           ...result.tokens,
-          expiresAt: result.tokens.expiresIn 
-            ? new Date(Date.now() + result.tokens.expiresIn * 1000).toISOString() 
+          expiresAt: result.tokens.expiresIn
+            ? new Date(Date.now() + result.tokens.expiresIn * 1000).toISOString()
             : null,
           testStatus: "active",
         });
 
-        return NextResponse.json({ 
-          success: true, 
+        return NextResponse.json({
+          success: true,
           connection: {
             id: connection.id,
             provider: connection.provider,
@@ -547,12 +548,14 @@ export async function POST(request, { params }) {
 
       // Still pending or error - don't create connection for pending states
       const isPending = result.pending || result.error === "authorization_pending" || result.error === "slow_down";
-      
+
       return NextResponse.json({
         success: false,
         error: result.error,
         errorDescription: result.errorDescription,
         pending: isPending,
+        // fatal: unrecoverable (e.g. post-exchange failure) — client must stop polling and show it
+        ...(result.fatal ? { fatal: true } : {}),
       });
     }
 

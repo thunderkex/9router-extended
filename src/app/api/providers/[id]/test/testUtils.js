@@ -154,6 +154,14 @@ const OAUTH_TEST_CONFIG = {
     },
     refreshable: false,
   },
+  "muse": {
+    url: "https://api.meta.ai/v1/models",
+    method: "GET",
+    authHeader: "Authorization",
+    authPrefix: "Bearer ",
+    extraHeaders: { "x-api-version": "1.0.0" },
+    refreshable: false,
+  },
 };
 
 /**
@@ -583,8 +591,8 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         const aliBaseUrl = connection.provider === "alicode-intl"
           ? "https://coding-intl.dashscope.aliyuncs.com/v1/chat/completions"
           : connection.provider === "alims-intl"
-          ? "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
-          : "https://coding.dashscope.aliyuncs.com/v1/chat/completions";
+            ? "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
+            : "https://coding.dashscope.aliyuncs.com/v1/chat/completions";
         const res = await fetchWithConnectionProxy(aliBaseUrl, {
           method: "POST",
           headers: { "Authorization": `Bearer ${connection.apiKey}`, "content-type": "application/json" },
@@ -659,7 +667,8 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
       case "dahl":
       case "atria":
       case "agnes":
-      case "bai": {
+      case "bai":
+      case "muse": {
         const cfg = PROVIDERS[connection.provider];
         const res = await fetchWithConnectionProxy(cfg.validateUrl, { headers: { Authorization: `Bearer ${connection.apiKey}` } }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
@@ -781,7 +790,7 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         );
         return { valid: exRes.ok, error: exRes.ok ? null : "Invalid Personal Access Token" };
       }
-case "llm7": {
+      case "llm7": {
         const baseUrl = connection.providerSpecificData?.baseUrl || "https://api.llm7.io/v1";
         const res = await fetchWithConnectionProxy(`${baseUrl.replace(/\/$/, "")}/models`, {
           headers: { Authorization: `Bearer ${connection.apiKey}` },

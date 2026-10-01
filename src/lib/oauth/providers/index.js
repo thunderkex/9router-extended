@@ -8,6 +8,7 @@ import claude from "./claude.js";
 import codex from "./codex.js";
 import xai from "./xai.js";
 import grokCli from "./grok-cli.js";
+import muse from "./muse.js";
 import geminiCli from "./gemini-cli.js";
 import antigravity from "./antigravity.js";
 import iflow from "./iflow.js";
@@ -35,6 +36,7 @@ const PROVIDERS = {
   codex,
   xai,
   "grok-cli": grokCli,
+  muse,
   "gemini-cli": geminiCli,
   antigravity,
   iflow,
@@ -177,7 +179,15 @@ export async function pollForToken(providerName, deviceCode, codeVerifier, extra
       // Call postExchange to get additional data (copilotToken, userInfo, etc.)
       let extra = null;
       if (provider.postExchange) {
-        extra = await provider.postExchange(result.data);
+        try {
+          extra = await provider.postExchange(result.data);
+        } catch (err) {
+          // The grant succeeded but post-login exchange failed (e.g. Muse key
+          // mint). The device code is one-shot, so re-polling can never
+          // recover — surface as fatal so the client stops and shows the error.
+          console.warn(`[oauth] ${providerName} postExchange failed:`, err?.message || err);
+          return { success: false, error: "exchange_failed", errorDescription: err.message, fatal: true };
+        }
       }
       const tokens = provider.mapTokens(result.data, extra);
       // Kiro IDC/Builder-ID tokens lack profileArn; resolve it to avoid 403
