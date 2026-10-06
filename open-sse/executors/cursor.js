@@ -9,7 +9,6 @@ import {
   decodeMessage,
   parseConnectRPCFrame,
   extractTextFromResponse,
-  encodeMcpTools,
   decodeMcpArgs,
 } from "../utils/cursorProtobuf.js";
 import { buildCursorHeaders } from "../utils/cursorChecksum.js";
