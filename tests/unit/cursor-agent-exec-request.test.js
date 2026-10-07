@@ -73,6 +73,38 @@ async function runAgent({ frames, stream, model = "gpt-5.2", tools }) {
 }
 
 describe("CursorExecutor AgentService exec_request handling", () => {
+  for (const frames of [[], [turnEndedFrame()]]) {
+    it(`rejects an empty ${frames.length ? "explicit turn" : "EOF"} without a successful SSE stop`, async () => {
+      const { result } = await runAgent({ frames, stream: true });
+      const text = await result.response.text();
+      const events = parseSSE(text);
+      expect(events.filter((event) => event.error)).toHaveLength(1);
+      expect(events.some((event) => event.choices?.[0]?.finish_reason === "stop")).toBe(false);
+      expect(text.match(/data: \[DONE\]/g)).toHaveLength(1);
+    });
+
+    it(`rejects an empty ${frames.length ? "explicit turn" : "EOF"} for non-stream clients`, async () => {
+      const { result } = await runAgent({ frames, stream: false });
+      expect(result.response.status).toBe(400);
+      expect((await result.response.json()).error.message).toContain("empty turn");
+    });
+  }
+
+  it("does not emit successful completion when reading the stream fails", async () => {
+    const executor = new CursorExecutor();
+    const written = stubAgentSession(executor, []);
+    const open = executor.openAgentHttp2Stream;
+    executor.openAgentHttp2Stream = (...args) => ({
+      ...open(...args),
+      async read() { throw new Error("transport interrupted"); },
+    });
+    const { response } = await executor.executeAgent({
+      model: "gpt-5.2", body: { messages: [{ role: "user", content: "hi" }] },
+      stream: true, credentials,
+    });
+    await expect(response.text()).rejects.toThrow("transport interrupted");
+    expect(written).toHaveLength(1);
+  });
   it("acknowledges a request-context exec request without ending the turn", async () => {
     const { result, written } = await runAgent({
       frames: [execRequestFrame(10), textFrame("hello")],
