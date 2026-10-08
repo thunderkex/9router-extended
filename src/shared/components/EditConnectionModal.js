@@ -22,6 +22,8 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
     organization: "",
   });
   const [cloudflareData, setCloudflareData] = useState({ accountId: "" });
+  const [awsData, setAwsData] = useState({ profile: "", region: "", accessKeyId: "", sessionToken: "" });
+  const [clearAwsSessionToken, setClearAwsSessionToken] = useState(false);
   const [region, setRegion] = useState("");
   const [assignedModel, setAssignedModel] = useState("");
   const [testing, setTesting] = useState(false);
@@ -56,21 +58,31 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           ? data.assignedModel
           : data.freebuffModel;
         setAssignedModel(existing || "");
+        if (AI_PROVIDERS?.[connection.provider]?.credentialForm === "aws") {
+          const psd = connection.providerSpecificData || {};
+          setAwsData({
+            profile: psd.profile || "",
+            region: psd.region || "",
+            accessKeyId: psd.accessKeyId || "",
+            sessionToken: "",
+          });
+          setClearAwsSessionToken(false);
+        }
+        // Load region for providers that support it (e.g. xiaomi-tokenplan)
+        const providerCfg = AI_PROVIDERS?.[connection.provider];
+        if (providerCfg?.regions) {
+          const savedRegion = connection.providerSpecificData?.region || providerCfg.defaultRegion || providerCfg.regions[0]?.id || "";
+          setRegion(savedRegion);
+        }
+        setTestResult(null);
+        setValidationResult(null);
       }
-      // Load region for providers that support it (e.g. xiaomi-tokenplan)
-      const providerCfg = AI_PROVIDERS?.[connection.provider];
-      if (providerCfg?.regions) {
-        const savedRegion = connection.providerSpecificData?.region || providerCfg.defaultRegion || providerCfg.regions[0]?.id || "";
-        setRegion(savedRegion);
-      }
-      setTestResult(null);
-      setValidationResult(null);
-    }
-  }, [connection]);
+    }, [connection, isOpen]);
 
   const isOAuth = connection?.authType === "oauth";
   const isAzure = connection?.provider === "azure";
   const isCloudflareAi = connection?.provider === "cloudflare-ai";
+  const usesAwsCredentialForm = AI_PROVIDERS?.[connection?.provider]?.credentialForm === "aws";
   const isCompatible = connection
     ? (isOpenAICompatibleProvider(connection.provider) || isAnthropicCompatibleProvider(connection.provider))
     : false;
@@ -81,6 +93,15 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
     if (providerRegions && region) return { ...((connection?.providerSpecificData) || {}), region };
     return undefined;
   };
+
+  // The server keeps a saved session token when this password field is blank. Other empty
+  // fields still clear their saved values so a profile can be switched to static keys.
+  const buildAwsSpecificData = () => ({
+    profile: awsData.profile.trim(),
+    region: awsData.region.trim(),
+    accessKeyId: awsData.accessKeyId.trim(),
+    sessionToken: clearAwsSessionToken ? null : awsData.sessionToken.trim(),
+  });
 
   const handleTest = async () => {
     if (!connection?.provider) return;
@@ -110,6 +131,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           apiKey: formData.apiKey,
           ...(isAzure ? { providerSpecificData: azureData } : {}),
           ...(isCloudflareAi ? { providerSpecificData: cloudflareData } : {}),
+          ...(usesAwsCredentialForm ? { providerSpecificData: buildAwsSpecificData() } : {}),
           ...(providerRegions ? { providerSpecificData: buildRegionSpecificData() } : {}),
         }),
       });
@@ -145,6 +167,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
                 apiKey: formData.apiKey,
                 ...(isAzure ? { providerSpecificData: azureData } : {}),
                 ...(isCloudflareAi ? { providerSpecificData: cloudflareData } : {}),
+                ...(usesAwsCredentialForm ? { providerSpecificData: buildAwsSpecificData() } : {}),
                 ...(providerRegions ? { providerSpecificData: buildRegionSpecificData() } : {}),
               }),
             });
@@ -163,7 +186,7 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           updates.lastErrorAt = null;
         }
       }
-      
+
       // Add Azure-specific data if this is an Azure connection
       if (isAzure) {
         updates.providerSpecificData = {
@@ -184,165 +207,213 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           delete baseData.assignedModel;
         }
         updates.providerSpecificData = baseData;
+        if (usesAwsCredentialForm) {
+          updates.providerSpecificData = buildAwsSpecificData();
+        }
+        // Persist updated region for region-aware providers
+        if (providerRegions && region) {
+          updates.providerSpecificData = buildRegionSpecificData();
+        }
+
+        await onSave(updates);
+      } finally {
+        setSaving(false);
       }
-      // Persist updated region for region-aware providers
-      if (providerRegions && region) {
-        updates.providerSpecificData = buildRegionSpecificData();
-      }
-      
-      await onSave(updates);
-    } finally {
-      setSaving(false);
-    }
-  };
+    };
 
-  if (!connection) return null;
+    if (!connection) return null;
 
-  return (
-    <Modal isOpen={isOpen} title="Edit Connection" onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <Input
-          label="Name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder={isOAuth ? "Account name" : "Production Key"}
-        />
-        {isOAuth && connection.email && (
-          <div className="bg-sidebar/50 p-3 rounded-lg">
-            <p className="text-sm text-text-muted mb-1">Email</p>
-            <p className="font-medium">{connection.email}</p>
-          </div>
-        )}
-        <Input
-          label="Priority"
-          type="number"
-          value={formData.priority}
-          onChange={(e) => setFormData({ ...formData, priority: Number.parseInt(e.target.value, 10) || 1 })}
-        />
+    return (
+      <Modal isOpen={isOpen} title="Edit Connection" onClose={onClose}>
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder={isOAuth ? "Account name" : "Production Key"}
+          />
+          {isOAuth && connection.email && (
+            <div className="bg-sidebar/50 p-3 rounded-lg">
+              <p className="text-sm text-text-muted mb-1">Email</p>
+              <p className="font-medium">{connection.email}</p>
+            </div>
+          )}
+          <Input
+            label="Priority"
+            type="number"
+            value={formData.priority}
+            onChange={(e) => setFormData({ ...formData, priority: Number.parseInt(e.target.value, 10) || 1 })}
+          />
 
-        {!isOAuth && (
-          <>
-            <div className="flex gap-2">
-              <Input
-                label="API Key"
-                type="password"
-                value={formData.apiKey}
-                onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder="Enter new API key"
-                hint="Leave blank to keep the current API key."
-                className="flex-1"
-              />
-              <div className="pt-6">
-                <Button onClick={handleValidate} disabled={!formData.apiKey || validating || saving} variant="secondary">
-                  {validating ? "Checking..." : "Check"}
-                </Button>
+          {!isOAuth && (
+            <>
+              <div className="flex gap-2">
+                <Input
+                  label="API Key"
+                  type="password"
+                  value={formData.apiKey}
+                  onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                  placeholder="Enter new API key"
+                  hint="Leave blank to keep the current API key."
+                  className="flex-1"
+                />
+                <div className="pt-6">
+                  <Button onClick={handleValidate} disabled={!formData.apiKey || validating || saving} variant="secondary">
+                    {validating ? "Checking..." : "Check"}
+                  </Button>
+                </div>
+              </div>
+              {validationResult && (
+                <Badge variant={validationResult === "success" ? "success" : "error"}>
+                  {validationResult === "success" ? "Valid" : "Invalid"}
+                </Badge>
+              )}
+            </>
+          )}
+
+          {isAzure && (
+            <div className="bg-sidebar/50 p-4 rounded-lg border border-accent/20">
+              <h3 className="font-semibold mb-3 text-sm">Azure OpenAI Configuration</h3>
+              <div className="flex flex-col gap-3">
+                <Input
+                  label="Azure Endpoint"
+                  value={azureData.azureEndpoint}
+                  onChange={(e) => setAzureData({ ...azureData, azureEndpoint: e.target.value })}
+                  placeholder="https://your-resource.openai.azure.com"
+                  hint="Your Azure OpenAI resource endpoint URL"
+                />
+                <Input
+                  label="Deployment Name"
+                  value={azureData.deployment}
+                  onChange={(e) => setAzureData({ ...azureData, deployment: e.target.value })}
+                  placeholder="gpt-4"
+                  hint="The deployment name in your Azure resource"
+                />
+                <Input
+                  label="API Version"
+                  value={azureData.apiVersion}
+                  onChange={(e) => setAzureData({ ...azureData, apiVersion: e.target.value })}
+                  placeholder="2024-10-01-preview"
+                  hint="Azure OpenAI API version to use"
+                />
+                <Input
+                  label="Organization"
+                  value={azureData.organization}
+                  onChange={(e) => setAzureData({ ...azureData, organization: e.target.value })}
+                  placeholder="Organization ID"
+                  hint="Required for billing"
+                />
               </div>
             </div>
-            {validationResult && (
-              <Badge variant={validationResult === "success" ? "success" : "error"}>
-                {validationResult === "success" ? "Valid" : "Invalid"}
-              </Badge>
-            )}
-          </>
-        )}
+          )}
 
-        {isAzure && (
-          <div className="bg-sidebar/50 p-4 rounded-lg border border-accent/20">
-            <h3 className="font-semibold mb-3 text-sm">Azure OpenAI Configuration</h3>
-            <div className="flex flex-col gap-3">
-              <Input
-                label="Azure Endpoint"
-                value={azureData.azureEndpoint}
-                onChange={(e) => setAzureData({ ...azureData, azureEndpoint: e.target.value })}
-                placeholder="https://your-resource.openai.azure.com"
-                hint="Your Azure OpenAI resource endpoint URL"
-              />
-              <Input
-                label="Deployment Name"
-                value={azureData.deployment}
-                onChange={(e) => setAzureData({ ...azureData, deployment: e.target.value })}
-                placeholder="gpt-4"
-                hint="The deployment name in your Azure resource"
-              />
-              <Input
-                label="API Version"
-                value={azureData.apiVersion}
-                onChange={(e) => setAzureData({ ...azureData, apiVersion: e.target.value })}
-                placeholder="2024-10-01-preview"
-                hint="Azure OpenAI API version to use"
-              />
-              <Input
-                label="Organization"
-                value={azureData.organization}
-                onChange={(e) => setAzureData({ ...azureData, organization: e.target.value })}
-                placeholder="Organization ID"
-                hint="Required for billing"
-              />
+          {usesAwsCredentialForm && (
+            <div className="bg-sidebar/50 p-4 rounded-lg border border-accent/20">
+              <h3 className="font-semibold mb-3 text-sm">AWS Bedrock Credentials</h3>
+              <div className="flex flex-col gap-3">
+                <Input
+                  label="AWS Profile (SSO — recommended)"
+                  value={awsData.profile}
+                  onChange={(e) => setAwsData({ ...awsData, profile: e.target.value })}
+                  placeholder="my-sso-profile"
+                  hint="Clear this to use static keys instead; a profile takes precedence."
+                />
+                <Input
+                  label="Region"
+                  value={awsData.region}
+                  onChange={(e) => setAwsData({ ...awsData, region: e.target.value })}
+                  placeholder="us-east-1"
+                />
+                <Input
+                  label="Access Key ID (only for static keys)"
+                  value={awsData.accessKeyId}
+                  onChange={(e) => setAwsData({ ...awsData, accessKeyId: e.target.value })}
+                  placeholder="AKIA..."
+                />
+                <Input
+                  label="Session Token (only for temporary ASIA… keys)"
+                  type="password"
+                  value={awsData.sessionToken}
+                  onChange={(e) => setAwsData({ ...awsData, sessionToken: e.target.value })}
+                  placeholder="FwoGZXIvYXdz..."
+                  hint="Leave blank to keep the saved token. Enter a new token to replace it."
+                  disabled={clearAwsSessionToken}
+                />
+                <label className="flex items-center gap-2 text-sm text-text-muted">
+                  <input
+                    type="checkbox"
+                    checked={clearAwsSessionToken}
+                    onChange={(e) => {
+                      setClearAwsSessionToken(e.target.checked);
+                      if (e.target.checked) setAwsData({ ...awsData, sessionToken: "" });
+                    }}
+                  />
+                  Remove saved session token
+                </label>
+              </div>
             </div>
+          )}
+
+          {providerRegions && (
+            <Select
+              label="Region"
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              options={providerRegions.map((r) => ({ value: r.id, label: r.label }))}
+            />
+          )}
+
+          {connection?.provider === "freebuff" && Array.isArray(assignedModelOptions) && assignedModelOptions.length > 0 && (
+            <Select
+              label="Assigned Model"
+              value={assignedModel}
+              onChange={(e) => setAssignedModel(e.target.value)}
+              options={[{ value: "", label: "— Unassigned —" }, ...assignedModelOptions.map((m) => ({ value: m.id, label: m.name || m.id }))]}
+              hint="Only used when Strict Model Assignment is enabled on the provider."
+            />
+          )}
+
+          {!isCompatible && !isAzure && !isCloudflareAi && (
+            <div className="flex items-center gap-3">
+              <Button onClick={handleTest} variant="secondary" disabled={testing}>
+                {testing ? "Testing..." : "Test Connection"}
+              </Button>
+              {testResult && (
+                <Badge variant={testResult === "success" ? "success" : "error"}>
+                  {testResult === "success" ? "Valid" : "Failed"}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button onClick={handleSubmit} fullWidth disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            <Button onClick={onClose} variant="ghost" fullWidth>Cancel</Button>
           </div>
-        )}
-
-        {providerRegions && (
-          <Select
-            label="Region"
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            options={providerRegions.map((r) => ({ value: r.id, label: r.label }))}
-          />
-        )}
-
-        {connection?.provider === "freebuff" && Array.isArray(assignedModelOptions) && assignedModelOptions.length > 0 && (
-          <Select
-            label="Assigned Model"
-            value={assignedModel}
-            onChange={(e) => setAssignedModel(e.target.value)}
-            options={[{ value: "", label: "— Unassigned —" }, ...assignedModelOptions.map((m) => ({ value: m.id, label: m.name || m.id }))]}
-            hint="Only used when Strict Model Assignment is enabled on the provider."
-          />
-        )}
-
-        {!isCompatible && !isAzure && !isCloudflareAi && (
-          <div className="flex items-center gap-3">
-            <Button onClick={handleTest} variant="secondary" disabled={testing}>
-              {testing ? "Testing..." : "Test Connection"}
-            </Button>
-            {testResult && (
-              <Badge variant={testResult === "success" ? "success" : "error"}>
-                {testResult === "success" ? "Valid" : "Failed"}
-              </Badge>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <Button onClick={handleSubmit} fullWidth disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-          <Button onClick={onClose} variant="ghost" fullWidth>Cancel</Button>
         </div>
-      </div>
-    </Modal>
-  );
-}
+      </Modal>
+    );
+  }
 
-EditConnectionModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  connection: PropTypes.shape({
-    id: PropTypes.string,
-    name: PropTypes.string,
-    email: PropTypes.string,
-    priority: PropTypes.number,
-    authType: PropTypes.string,
-    provider: PropTypes.string,
-    providerSpecificData: PropTypes.object,
-  }),
-  proxyPools: PropTypes.arrayOf(PropTypes.shape({
-    id: PropTypes.string,
-    name: PropTypes.string,
-  })),
-  onSave: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired,
-  assignedModelOptions: PropTypes.arrayOf(PropTypes.shape({
-    id: PropTypes.string,
-    name: PropTypes.string,
-  })),
-};
-
+  EditConnectionModal.propTypes = {
+    isOpen: PropTypes.bool.isRequired,
+    connection: PropTypes.shape({
+      id: PropTypes.string,
+      name: PropTypes.string,
+      email: PropTypes.string,
+      priority: PropTypes.number,
+      authType: PropTypes.string,
+      provider: PropTypes.string,
+      providerSpecificData: PropTypes.object,
+    }),
+    proxyPools: PropTypes.arrayOf(PropTypes.shape({
+      id: PropTypes.string,
+      name: PropTypes.string,
+    })),
+    onSave: PropTypes.func.isRequired,
+    onClose: PropTypes.func.isRequired,
+    assignedModelOptions: PropTypes.arrayOf(PropTypes.shape({
+      id: PropTypes.string,
+      name: PropTypes.string,
+    })),
+  };
