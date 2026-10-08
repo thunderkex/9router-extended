@@ -129,7 +129,14 @@ export const MODEL_CAPABILITIES = {
 
   // GLM vision variants (text GLM has no vision) — 5.3-Flash and 5V-Turbo are
   // natively multimodal per z.ai, and 5.3-Flash carries the full 1M window.
-  "glm-5.3-flash":     { vision: true, videoInput: true, pdf: true, reasoning: true, thinkingFormat: "zai", contextWindow: 1000000, maxOutput: 131072 },
+  //
+  // thinkingCanDisable:false on the 5.3 line is REQUIRED, not a default. z.ai's
+  // docs state: "GLM-5.3 and GLM-5.3-FLASH no longer support disabling thinking
+  // (an error will occur if the thinking.type parameter is set to disabled)."
+  // With it left true, applyThinking emitted enable_thinking:false whenever a
+  // turn asked for no reasoning, and z.ai answered 400 code 1210 "Invalid API
+  // parameter" — intermittently, because only some turns ask. #4409
+  "glm-5.3-flash":     { vision: true, videoInput: true, pdf: true, reasoning: true, thinkingFormat: "zai", thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
   "glm-4.6v":          { vision: true, videoInput: true, reasoning: true, thinkingFormat: "zai", contextWindow: 128000, maxOutput: 32768 },
   "glm-4.5v":          { vision: true, videoInput: true, reasoning: true, thinkingFormat: "zai", contextWindow: 64000, maxOutput: 16384 },
   // GLM-5.2 has 1M context — pattern *glm-5* only gives 200k, so override here
@@ -425,7 +432,17 @@ export const PATTERN_CAPABILITIES = [
   // ── GLM / Z.ai (thinking.enabled; disable via enable_thinking:false) ─
   // reasoning_effort is only read by z.ai from GLM-5.2 onward (docs.z.ai/guides/capabilities/thinking) —
   // older GLM (4.x, 5.0, 5.1, 5-turbo, 5v-turbo) ignore it, so gate it per exact version, not the "*glm-5*" catch-all.
-  { pattern: "*glm-5.3*",       caps: { reasoning: true, thinkingFormat: "zai", thinkingEffortSupported: true, contextWindow: 1000000, maxOutput: 128000 } },
+  // thinkingCanDisable:false for the whole 5.3 line, per z.ai docs:
+  // "GLM-5.3 and GLM-5.3-FLASH no longer support disabling thinking (an error
+  // will occur if the thinking.type parameter is set to disabled)." Set on the
+  // pattern rather than an exact entry so both glm-5.3 and glm-5.3-flash get it
+  // while keeping thinkingEffortSupported:true, which the pattern owns. #4409
+  { pattern: "*glm-5.3*",       caps: { reasoning: true, thinkingFormat: "zai", thinkingEffortSupported: true, thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 128000 } },
+  // 5.2 keeps its 1M window. thinkingCanDisable is deliberately NOT set here:
+  // the exact MODEL_CAPABILITIES entry for glm-5.2 (added Sep 2026) already
+  // declares it false, and that predates this fix — z.ai's docs suggest 5.2 can
+  // in fact disable thinking, so that entry looks wrong, but changing it is
+  // outside the scope of #4409 and is worth its own issue.
   { pattern: "*glm-5.2*",       caps: { reasoning: true, thinkingFormat: "zai", thinkingEffortSupported: true, contextWindow: 1000000, maxOutput: 128000 } },
   { pattern: "*glm-5*",         caps: { reasoning: true, thinkingFormat: "zai", contextWindow: 200000, maxOutput: 128000 } },
   { pattern: "*glm-4.7*",       caps: { reasoning: true, thinkingFormat: "zai", contextWindow: 200000, maxOutput: 128000 } },
