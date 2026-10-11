@@ -483,6 +483,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
     connectionNoProxy: credentials?.providerSpecificData?.connectionNoProxy || "",
     vercelRelayUrl: credentials?.providerSpecificData?.vercelRelayUrl || "",
+    // Strict pools must never silently fall back to a direct connection —
+    // honored on the Cursor AgentService h2 path and in proxyFetch (#4333).
+    proxyPoolId: credentials?.providerSpecificData?.connectionProxyPoolId || null,
+    strictProxy: credentials?.providerSpecificData?.strictProxy === true,
   };
 
   if (proxyOptions.vercelRelayUrl) {
