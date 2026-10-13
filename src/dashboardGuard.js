@@ -135,8 +135,12 @@ function isLoopbackPeer(request) {
   if (hasTrustedPeerHeaders(request)) {
     return isLoopbackHostname(request.headers.get("x-9r-real-ip"));
   }
-  // Fallback: check Host header (spoofable, but combined with origin check in isLocalRequest)
-  return isLoopbackHostname(request.headers.get("host"));
+  // Bare `next dev` forks its server, so the wrapper never loads and no peer address
+  // reaches us. Host is spoofable, so this stays confined to development.
+  if (process.env.NODE_ENV === "development") {
+    return isLoopbackHostname(request.headers.get("host"));
+  }
+  return false;
 }
 
 export function isLocalRequest(request) {
@@ -188,13 +192,8 @@ async function canAccessLocalOnlyRoute(request) {
   // Browser on host: loopback Host + Origin (blocks tunnel/CSRF) + auth (JWT or requireLogin=false)
   if (isLocal && isAuth) return true;
 
-  // For /api/plugins/*, allow authenticated remote access (VPS/production use case)
-  const pathname = request.nextUrl.pathname;
-  if (pathname.startsWith("/api/plugins/") && isAuth) return true;
-
   // For /api/skills/install, allow authenticated remote access (VPS/production use case).
-  // Skills are user-initiated installs from the dashboard; a VPS admin already has shell
-  // access, so the loopback gate isn't adding real protection — only blocking the UI.
+  const pathname = request.nextUrl.pathname;
   if (pathname.startsWith("/api/skills/install") && isAuth) return true;
 
   // Allow password header for backup/restore (x-9r-password)

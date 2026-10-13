@@ -10,26 +10,26 @@ import { aggregateComboCapabilities, getCapabilitiesForModel } from "../../open-
 //
 // resolveCaps lets a caller hand in the server's answer. It must only override
 // what it carries — the local tables still own tools/pdf/audio/video/thinking*.
-const GLM53_FED = { vision: true, search: false, reasoning: true, contextWindow: 1_000_000, maxOutput: 131_072 };
+const GLM51_FED = { vision: true, search: false, reasoning: true, contextWindow: 1_000_000, maxOutput: 131_072 };
 
 describe("aggregateComboCapabilities: resolveCaps override", () => {
-  const models = ["glm-cn/glm-5.3", "deepseek-v4.1-flash"];
+  const models = ["glm-cn/glm-5.1", "deepseek-v4.1-flash"];
 
   it("falls back to the pattern default without a resolver", () => {
     const caps = aggregateComboCapabilities(models);
-    // glm-5.3 has no exact entry, so the *glm-5.3* pattern gives 200k and caps the combo.
+    // glm-5.1 has no exact entry, so the *glm-5* pattern gives 200k and caps the combo.
     expect(caps.contextWindow).toBe(200_000);
   });
 
   it("uses the fed limits when a resolver supplies them", () => {
-    const resolver = (fullId) => (fullId === "glm-cn/glm-5.3" ? GLM53_FED : null);
+    const resolver = (fullId) => (fullId === "glm-cn/glm-5.1" ? GLM51_FED : null);
     const caps = aggregateComboCapabilities(models, null, resolver);
     expect(caps.contextWindow).toBe(1_000_000);
   });
 
   it("keeps the fields the override does not carry", () => {
     const plain = aggregateComboCapabilities(models);
-    const fed = aggregateComboCapabilities(models, null, (id) => (id === "glm-cn/glm-5.3" ? GLM53_FED : null));
+    const fed = aggregateComboCapabilities(models, null, (id) => (id === "glm-cn/glm-5.1" ? GLM51_FED : null));
     // The override carries no tools/pdf/thinking fields, so those must be unchanged.
     for (const field of ["tools", "pdf", "audioInput", "videoInput", "imageOutput", "audioOutput", "thinkingFormat"]) {
       expect(fed[field]).toEqual(plain[field]);
@@ -37,11 +37,11 @@ describe("aggregateComboCapabilities: resolveCaps override", () => {
   });
 
   it("still applies the conservative rule across members", () => {
-    const resolver = (fullId) => (fullId === "glm-cn/glm-5.3" ? GLM53_FED : null);
+    const resolver = (fullId) => (fullId === "glm-cn/glm-5.1" ? GLM51_FED : null);
     const caps = aggregateComboCapabilities(models, null, resolver);
-    // Only glm-5.3 was fed 1M; deepseek-v4.1-flash resolves locally to 1M, so min stays 1M.
+    // Only glm-5.1 was fed 1M; deepseek-v4.1-flash resolves locally to 1M, so min stays 1M.
     // Feeding a *smaller* value for one member must pull the aggregate down.
-    const smaller = aggregateComboCapabilities(models, null, (id) => (id === "glm-cn/glm-5.3" ? { ...GLM53_FED, contextWindow: 64_000 } : null));
+    const smaller = aggregateComboCapabilities(models, null, (id) => (id === "glm-cn/glm-5.1" ? { ...GLM51_FED, contextWindow: 64_000 } : null));
     expect(smaller.contextWindow).toBe(64_000);
     expect(caps.maxOutput).toBe(384_000); // max across members, from deepseek
   });

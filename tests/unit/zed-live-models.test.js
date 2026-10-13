@@ -85,8 +85,12 @@ beforeAll(async () => {
   ({ createProviderConnection } = await import("@/models/index.js"));
 });
 
-afterAll(() => {
-  fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
+afterAll(async () => {
+  try {
+    const db = await import("@/lib/db/index.js");
+    await db.closeDb?.();
+  } catch {}
+  try { if (process.env.DATA_DIR) fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true }); } catch {}
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
 });

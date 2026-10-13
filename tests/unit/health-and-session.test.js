@@ -8,12 +8,12 @@ describe("Routing Health & Circuit Breaker", () => {
     expect(isCircuitOpen("openai")).toBe(false);
   });
 
-  it("trips circuit breaker after consecutive failures threshold", () => {
+  it("trips circuit breaker after consecutive failures threshold", async () => {
     for (let i = 0; i < 5; i++) {
       record("mock-provider", { success: false, latencyMs: 1000 });
     }
     expect(isCircuitOpen("mock-provider")).toBe(true);
-    const snapshot = getProviderHealthSnapshot();
+    const snapshot = await getProviderHealthSnapshot();
     expect(snapshot.providers["mock-provider"]?.circuitState).toBe("open");
   });
 

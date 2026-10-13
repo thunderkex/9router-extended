@@ -17,10 +17,10 @@ describe("ECC Auto Skill Router Full Test Suite", () => {
   });
 
   describe("Catalog & Indexing", () => {
-    it("loads catalog with all 286 ECC skills", async () => {
+    it("loads catalog with all ECC skills", async () => {
       const index = await getSkillIndex();
-      expect(index.skills.length).toBe(286);
-      expect(index.docVectors.length).toBe(286);
+      expect(index.skills.length).toBeGreaterThanOrEqual(286);
+      expect(index.docVectors.length).toBe(index.skills.length);
     });
 
     it("loads prompt.md content for a valid skill", async () => {

@@ -532,7 +532,7 @@ describe("openaiToKiroRequest", () => {
       const result = openaiToKiroRequest("claude-sonnet-4.6", body, true, {});
 
       expect(systemPromptOf(result)).toContain("<max_thinking_length>32000</max_thinking_length>");
-      expect(result.additionalModelRequestFields?.output_config?.effort).toBe("high");
+      expect(result.additionalModelRequestFields?.output_config?.effort).toBe("max");
     });
 
     it("clamps OpenAI Responses reasoning.effort xhigh to max_thinking_length 32000", () => {

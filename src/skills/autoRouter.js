@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { stemWord } from "../../scripts/sync-ecc-skills.js";
 
 // In-memory cache for catalog and TF-IDF index
@@ -51,7 +52,7 @@ export function tokenize(text) {
  * Find the skills/ecc-imported directory
  */
 async function findEccImportedDir() {
-  const __dirname = path.dirname(new URL(import.meta.url).pathname);
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
     path.join(process.cwd(), "skills", "ecc-imported"),
     path.join(__dirname, "..", "..", "skills", "ecc-imported"),

@@ -19,8 +19,9 @@ beforeAll(async () => {
   await db.initDb();
 });
 
-afterAll(() => {
-  if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+afterAll(async () => {
+  try { await db?.closeDb?.(); } catch {}
+  try { if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
 });

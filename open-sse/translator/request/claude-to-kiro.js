@@ -353,6 +353,15 @@ export function claudeToKiroRequest(model, body, stream, credentials) {
     enumerable: false,
   });
 
+  if (systemPrompt) {
+    Object.defineProperty(payload, "systemPrompt", {
+      value: systemPrompt,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+
   // Kiro tool specs get sanitized names (`mcp__a__b` → `mcp_a_b`); keep the
   // reverse map so tool calls stream back under the client's own names.
   const restoredToolNames = new Map();
