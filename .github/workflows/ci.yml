@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+
 jobs:
   build:
     name: Build & Package (Node ${{ matrix.node-version }} on ${{ matrix.os }})
@@ -18,8 +21,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         node-version: [20.x, 22.x]
+        include:
+          - os: windows-latest
+            node-version: 22.x
 
     steps:
       - name: Checkout Code
@@ -29,11 +35,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: |
+            package.json
+            cli/package.json
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next-cli-build/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package.json', 'cli/package.json') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('package.json', 'cli/package.json') }}-
+            ${{ runner.os }}-nextjs-
 
       - name: Install Dependencies
         run: |
-          npm install --no-audit --no-fund
-          cd cli && npm install --no-audit --no-fund
+          npm install --no-audit --no-fund --prefer-offline
+          npm --prefix cli install --no-audit --no-fund --prefer-offline
         shell: bash
 
       - name: Build & Package 9Router CLI Bundle
@@ -53,3 +72,4 @@ jobs:
           name: 9router-cli-package
           path: "*.tgz"
           if-no-files-found: error
+          compression-level: 0
