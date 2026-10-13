@@ -83,6 +83,22 @@ describe("OpenCode Free Session ID Format", () => {
     expect(translateSessionId(valid)).toBe(valid);
     expect(translateSessionId(`  ${valid}  `)).toBe(valid);
   });
+
+  it("translates arbitrary sessions with valid inverted timestamp prefix (fixes #4780)", () => {
+    const raw = "claude:non-opencode-uuid-12345";
+    const translated = translateSessionId(raw, "claude");
+    expect(translated).toMatch(OPENCODE_SESSION_RE);
+    expect(translated).toHaveLength(30);
+
+    // Upstream Zen verifies the 12-hex prefix decodes to ~(BigInt(Date.now()) * 4096n + counter)
+    // The lowest byte of ~(...) always produces 'fe' in hex (ending with 'ffe' in the 12-hex prefix).
+    const timeHex = translated.slice(4, 16);
+    expect(timeHex.endsWith("fe")).toBe(true);
+
+    // Stability across repeated translations of the same input
+    const repeated = translateSessionId(raw, "claude");
+    expect(repeated).toBe(translated);
+  });
 });
 
 describe("OpenCode Free Executor Session Resolution", () => {
