@@ -1,6 +1,6 @@
 {
   "name": "9router",
-  "version": "0.5.86-extended",
+  "version": "0.5.99-extended",
   "description": "9Router extendedCLI - Start and manage 9Router server",
   "bin": {
     "9router": "./cli.js"
