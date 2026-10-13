@@ -91,9 +91,10 @@ describe("OpenCode Free Session ID Format", () => {
     expect(translated).toHaveLength(30);
 
     // Upstream Zen verifies the 12-hex prefix decodes to ~(BigInt(Date.now()) * 4096n + counter)
-    // The lowest byte of ~(...) always produces 'fe' in hex (ending with 'ffe' in the 12-hex prefix).
     const timeHex = translated.slice(4, 16);
-    expect(timeHex.endsWith("fe")).toBe(true);
+    const recovered = (0xffffffffffffn ^ BigInt(`0x${timeHex}`)) >> 12n;
+    const nowExpected = BigInt(Date.now()) & ((1n << 36n) - 1n);
+    expect(Math.abs(Number(recovered - nowExpected))).toBeLessThanOrEqual(2000);
 
     // Stability across repeated translations of the same input
     const repeated = translateSessionId(raw, "claude");
