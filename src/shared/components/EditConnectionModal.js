@@ -58,25 +58,26 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           ? data.assignedModel
           : data.freebuffModel;
         setAssignedModel(existing || "");
-        if (AI_PROVIDERS?.[connection.provider]?.credentialForm === "aws") {
-          const psd = connection.providerSpecificData || {};
-          setAwsData({
-            profile: psd.profile || "",
-            region: psd.region || "",
-            accessKeyId: psd.accessKeyId || "",
-            sessionToken: "",
-          });
-          setClearAwsSessionToken(false);
-        }
-        // Load region for providers that support it (e.g. xiaomi-tokenplan)
-        const providerCfg = AI_PROVIDERS?.[connection.provider];
-        if (providerCfg?.regions) {
-          const savedRegion = connection.providerSpecificData?.region || providerCfg.defaultRegion || providerCfg.regions[0]?.id || "";
-          setRegion(savedRegion);
-        }
-        setTestResult(null);
-        setValidationResult(null);
       }
+      if (AI_PROVIDERS?.[connection.provider]?.credentialForm === "aws") {
+        const psd = connection.providerSpecificData || {};
+        setAwsData({
+          profile: psd.profile || "",
+          region: psd.region || "",
+          accessKeyId: psd.accessKeyId || "",
+          sessionToken: "",
+        });
+        setClearAwsSessionToken(false);
+      }
+      // Load region for providers that support it (e.g. xiaomi-tokenplan)
+      const providerCfg = AI_PROVIDERS?.[connection.provider];
+      if (providerCfg?.regions) {
+        const savedRegion = connection.providerSpecificData?.region || providerCfg.defaultRegion || providerCfg.regions[0]?.id || "";
+        setRegion(savedRegion);
+      }
+      setTestResult(null);
+      setValidationResult(null);
+    }
     }, [connection, isOpen]);
 
   const isOAuth = connection?.authType === "oauth";
@@ -207,19 +208,20 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
           delete baseData.assignedModel;
         }
         updates.providerSpecificData = baseData;
-        if (usesAwsCredentialForm) {
-          updates.providerSpecificData = buildAwsSpecificData();
-        }
-        // Persist updated region for region-aware providers
-        if (providerRegions && region) {
-          updates.providerSpecificData = buildRegionSpecificData();
-        }
-
-        await onSave(updates);
-      } finally {
-        setSaving(false);
       }
-    };
+      if (usesAwsCredentialForm) {
+        updates.providerSpecificData = buildAwsSpecificData();
+      }
+      // Persist updated region for region-aware providers
+      if (providerRegions && region) {
+        updates.providerSpecificData = buildRegionSpecificData();
+      }
+
+      await onSave(updates);
+    } finally {
+      setSaving(false);
+    }
+  };
 
     if (!connection) return null;
 
@@ -393,27 +395,27 @@ export default function EditConnectionModal({ isOpen, connection, proxyPools, on
         </div>
       </Modal>
     );
-  }
+}
 
-  EditConnectionModal.propTypes = {
-    isOpen: PropTypes.bool.isRequired,
-    connection: PropTypes.shape({
-      id: PropTypes.string,
-      name: PropTypes.string,
-      email: PropTypes.string,
-      priority: PropTypes.number,
-      authType: PropTypes.string,
-      provider: PropTypes.string,
-      providerSpecificData: PropTypes.object,
-    }),
-    proxyPools: PropTypes.arrayOf(PropTypes.shape({
-      id: PropTypes.string,
-      name: PropTypes.string,
-    })),
-    onSave: PropTypes.func.isRequired,
-    onClose: PropTypes.func.isRequired,
-    assignedModelOptions: PropTypes.arrayOf(PropTypes.shape({
-      id: PropTypes.string,
-      name: PropTypes.string,
-    })),
-  };
+EditConnectionModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  connection: PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+    email: PropTypes.string,
+    priority: PropTypes.number,
+    authType: PropTypes.string,
+    provider: PropTypes.string,
+    providerSpecificData: PropTypes.object,
+  }),
+  proxyPools: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+  })),
+  onSave: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+  assignedModelOptions: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.string,
+    name: PropTypes.string,
+  })),
+};

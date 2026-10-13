@@ -40,39 +40,6 @@ const API_KEY_ENV = "OPENAI_API_KEY";
 
 const getHermesDir = () => HERMES_HOME_DIR;
 
-// Match top-level "model:" block (until next non-indented, non-empty line)
-const MODEL_BLOCK_RE = /^model:[ \t]*\r?\n((?:[ \t]+.*\r?\n?|[ \t]*\r?\n)*)/m;
-const DELEGATION_BLOCK_RE = /^delegation:[ \t]*\r?\n((?:[ \t]+.*\r?\n?|[ \t]*\r?\n)*)/m;
-// "auxiliary:" block; children are 2-space-indented role keys with 4+-space fields
-const AUX_BLOCK_RE = /^auxiliary:[ \t]*\r?\n((?:(?:[ \t]+.*\r?\n?)|(?:[ \t]*\r?\n))*)/m;
-const auxRoleRe = (role) => new RegExp(`^  ${role}:[ \\t]*\\r?\\n(?:(?:[ \\t]{4,}.*\\r?\\n?)|(?:[ \\t]*\\r?\\n))*`, "m");
-
-const buildModelBlock = (model, baseUrl) =>
-  `model:\n  default: "${model}"\n  provider: "custom"\n  base_url: "${baseUrl}"\n  api_key: \${OPENAI_API_KEY}\n`;
-
-const buildDelegationBlock = (model, baseUrl) =>
-  `delegation:\n  model: "${model}"\n  provider: "custom"\n  base_url: "${baseUrl}"\n  api_key: \${OPENAI_API_KEY}\n`;
-
-const buildAuxRoleBlock = (role, model, baseUrl) =>
-  `  ${role}:\n    provider: "custom"\n    model: "${model}"\n    base_url: "${baseUrl}"\n    api_key: \${OPENAI_API_KEY}\n`;
-
-// Parse current model block back to fields (best-effort, simple key:value)
-const parseModelBlock = (yaml) => {
-  const match = yaml.match(MODEL_BLOCK_RE);
-  if (!match) return null;
-  const body = match[1] || "";
-  const get = (key) => {
-    const m = body.match(new RegExp(`^[ \\t]+${key}:[ \\t]*["']?([^"'\\r\\n]+)["']?`, "m"));
-    return m ? m[1].trim() : null;
-  };
-  return {
-    default: get("default"),
-    provider: get("provider"),
-    base_url: get("base_url"),
-    api_key: get("api_key"),
-  };
-};
-
 // Profile comes from ?profile= on GET (all-statuses calls GET() with no argument at all,
 // so every reader must tolerate a missing request) and from the JSON body on POST/DELETE.
 // POST/DELETE fall back to the query string — callers reach for either.
@@ -83,27 +50,6 @@ const getQueryParam = (request, key) => {
     return url?.searchParams?.get(key) || null;
   } catch {
     return null;
-  }
-};
-
-const upsertModelBlock = (yaml, newBlock) => {
-  if (MODEL_BLOCK_RE.test(yaml)) return yaml.replace(MODEL_BLOCK_RE, newBlock);
-  return yaml.length > 0 ? `${newBlock}\n${yaml}` : newBlock;
-};
-
-const upsertDelegationBlock = (yaml, newBlock) => {
-  if (DELEGATION_BLOCK_RE.test(yaml)) return yaml.replace(DELEGATION_BLOCK_RE, newBlock);
-  return yaml.endsWith("\n") || yaml.length === 0 ? `${yaml}${newBlock}` : `${yaml}\n${newBlock}`;
-};
-
-const removeDelegationBlock = (yaml) => yaml.replace(DELEGATION_BLOCK_RE, "");
-
-const upsertAuxRole = (yaml, role, roleBlock) => {
-  const re = auxRoleRe(role);
-  const m = yaml.match(AUX_BLOCK_RE);
-  if (!m) {
-    const block = `auxiliary:\n${roleBlock}`;
-    return yaml.endsWith("\n") || yaml.length === 0 ? `${yaml}${block}` : `${yaml}\n${block}`;
   }
 };
 
