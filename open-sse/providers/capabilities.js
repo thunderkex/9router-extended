@@ -224,6 +224,23 @@ export const PROVIDER_CAPABILITIES = {
   // Overrides the global entry, whose z.ai shape is correct for z.ai itself.
   "opencode-go": {
     "glm-5.3-flash": { vision: true, videoInput: true, pdf: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
+    // OpenCode Go's claude-haiku-5-5 rejects `thinking.type.enabled` — the shape the
+    // global *claude*haiku* → claude-budget pattern sends — with 400: `"thinking.type.enabled"
+    // is not supported for this model. Use "thinking.type.adaptive" and "output_config.effort"`.
+    // claude-adaptive emits exactly that (adaptive switch + output_config.effort), so override
+    // the global haiku pattern for this provider only. Limits follow the model, not the
+    // pattern: the upstream catalog reports context_length 1000000 and the synced catalog
+    // maxOutput 128000 for this id (the provider override short-circuits before the
+    // catalog overlay, so maxOutput must be stated here too).
+    "claude-haiku-5-5": { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
+  },
+  "commandcode": {
+    // The generic commandcode fallback (1M/384k for every unlisted model) happened
+    // to give haiku-5-5 the right context by accident. Pin it to the catalog values:
+    // GET https://api.commandcode.ai/provider/v1/models reports context_length 1000000
+    // for this id (claude-haiku-4-5-20251001 is 200000, so the 1M is per-model, not
+    // gateway-wide) — and the synced catalog carries maxOutput 128000.
+    "claude-haiku-5-5": { vision: true, reasoning: true, search: true, thinkingFormat: "commandcode", thinkingEffortSupported: true, contextWindow: 1000000, maxOutput: 128000 },
   },
   "codex": {
     "gpt-6.1-sol":               { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
