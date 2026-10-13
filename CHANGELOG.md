@@ -1,3 +1,8 @@
+# Unreleased
+
+## Fixes
+- **Nous**: add missing attribution tags to API-key requests through compatible Chat Completions connections, preserving caller tags and identities (#4745)
+
 # v0.5.99 (2026-10-08)
 
 ## Features
