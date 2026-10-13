@@ -10,6 +10,7 @@
 - **Antigravity**: add Claude Sonnet 5.5 and Opus 5.5 support with reasoning effort variants, pricing, and family quota routing
 - **Bedrock**: add Amazon Bedrock (`bedrock` and `bedrock-xai`) provider with static keys, AWS SSO profiles, native SigV4 signer, and shared EventStream decoder (#4157)
 - **Hermes**: per-profile configuration across API, Dashboard card, and CLI menu with bulk apply, scoped reset, and auxiliary roles (#4660)
+- **Hermes**: audio transcription via 9router — an "Audio STT" toggle in the card points the profile's `stt.openai.base_url` at `/v1/audio/transcriptions` with an STT-kind model picker (#4763)
 - **API Keys**: per-API-key access control — restrict keys to allowed combos and models via interactive modal
 - **ElevenLabs**: add Scribe speech-to-text support (#4537)
 - **Proxy Pools**: add Netlify serverless relay proxy pool with digest-deploy API and dashboard management modal
