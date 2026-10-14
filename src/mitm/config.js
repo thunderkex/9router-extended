@@ -51,6 +51,7 @@ function isChatRequest(tool, req) {
 // Synonym map: rawModel from request → canonical alias key in mitmAlias DB
 const MODEL_SYNONYMS = {
   antigravity: {
+    "gemini-4-argon": "gemini-4-argon",
     "gemini-default": "gemini-3.8-flash-medium",
     "gemini-3.5-flash-high": "gemini-3.8-flash-high",
     "gemini-3.5-flash-medium": "gemini-3.8-flash-medium",
@@ -99,6 +100,7 @@ const MODEL_SYNONYMS = {
 // Order matters: more specific patterns first. Catches AG renamed variants (e.g. gemini-pro-agent)
 const MODEL_PATTERNS = {
   antigravity: [
+    { match: /argon/i,                                             alias: "gemini-4-argon" },
     { match: /flash.*extra.*low|extra.*low.*flash|flash.*low|low.*flash/i, alias: "gemini-3.8-flash-low" },
     { match: /flash.*medium|medium.*flash/i,                       alias: "gemini-3.8-flash-medium" },
     { match: /flash.*agent|agent.*flash|flash/i,                   alias: "gemini-3.8-flash-high" },
