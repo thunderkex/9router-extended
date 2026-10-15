@@ -8,7 +8,6 @@ import {
   coerceResponsesArguments,
   coerceResponsesOutput,
 } from "../translator/formats/responsesApi.js";
-import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 
 const SESSION_HEADER = "x-opencode-session";
 const SESSION_FIELD = "_opencodeZenSession";
@@ -40,15 +39,20 @@ function unstableRandom() {
   return randomPart;
 }
 
+// Session prefix = 12 hex of ~(timeMs * 0x1000 + counter), low 48 bits, like the CLI.
+// Upstream decodes it and rejects a non-small counter with 403 FreeTierError
+// (live probes: counter 0–16 pass, >=100 fail), so the counter must stay real.
+const SESSION_PREFIX_MASK = (1n << 48n) - 1n;
+const SESSION_TIME_MASK = (1n << 36n) - 1n;
+
+function descendingTimeHex(time, counterValue) {
+  return (~(BigInt(time) * 0x1000n + BigInt(counterValue)) & SESSION_PREFIX_MASK)
+    .toString(16)
+    .padStart(12, "0");
+}
+
 export function generateSessionId(timestamp = Date.now()) {
-  const current = BigInt(timestamp) * 0x1000n + 1n;
-  const value = ~current;
-  const time = Array.from({ length: 6 }, (_, index) =>
-    Number((value >> BigInt(40 - 8 * index)) & 0xffn)
-      .toString(16)
-      .padStart(2, "0")
-  ).join("");
-  return `ses_${time}${unstableRandom()}`;
+  return `ses_${descendingTimeHex(timestamp, 1)}${unstableRandom()}`;
 }
 
 export function generateRequestId(timestamp = Date.now()) {
@@ -62,36 +66,22 @@ export function generateRequestId(timestamp = Date.now()) {
   return `msg_${time}${unstableRandom()}`;
 }
 
-const translatedZenSessions = new Map();
-const MAX_TRANSLATED_SESSIONS = 1000;
-const translatedZenSessionCleanup = setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of translatedZenSessions) {
-    if (now - entry.lastUsed > (MEMORY_CONFIG?.sessionTtlMs || 1800000)) {
-      translatedZenSessions.delete(key);
-    }
-  }
-}, MEMORY_CONFIG?.sessionCleanupIntervalMs || 300000);
-if (translatedZenSessionCleanup.unref) translatedZenSessionCleanup.unref();
-
 export function translateSessionId(sessionId, clientTool = "") {
   if (typeof sessionId === "string" && OPENCODE_SESSION_RE.test(sessionId.trim())) {
     return sessionId.trim();
   }
-  const key = `opencode-zen:ses:${clientTool || "generic"}:${sessionId || ""}`;
-  const existing = translatedZenSessions.get(key);
-  if (existing) {
-    existing.lastUsed = Date.now();
-    translatedZenSessions.delete(key);
-    translatedZenSessions.set(key, existing);
-    return existing.sessionId;
+  const digest = crypto
+    .createHash("sha256")
+    .update(`opencode\0${clientTool || "generic"}\0${sessionId || ""}`)
+    .digest();
+  // Deterministic time field from the digest, counter pinned to 1 (what the CLI sends).
+  const time = BigInt(`0x${digest.subarray(0, 5).toString("hex")}`) & SESSION_TIME_MASK;
+  const timeHex = descendingTimeHex(time, 1);
+  let randomPart = "";
+  for (let i = 6; i < 20; i++) {
+    randomPart += BASE62_CHARS[digest[i] % 62];
   }
-  const id = generateSessionId();
-  if (translatedZenSessions.size >= MAX_TRANSLATED_SESSIONS) {
-    translatedZenSessions.delete(translatedZenSessions.keys().next().value);
-  }
-  translatedZenSessions.set(key, { sessionId: id, lastUsed: Date.now() });
-  return id;
+  return `ses_${timeHex}${randomPart}`;
 }
 
 function toolNameOf(tool) {
