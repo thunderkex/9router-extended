@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   clearAccountError: vi.fn(),
   extractApiKey: vi.fn(() => null),
   isValidApiKey: vi.fn(),
-  checkApiKeyQuota: async () => null,
   getSettings: vi.fn(),
   getCombos: vi.fn(),
   handleFetchCore: vi.fn(),

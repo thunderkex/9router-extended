@@ -3,7 +3,7 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  checkApiKeyQuota,
+  isValidApiKey,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
@@ -59,8 +59,11 @@ export async function handleImageGeneration(request) {
 
   const apiKey = extractApiKey(request);
   const settings = await getSettings();
-  const keyGate = await checkApiKeyQuota(apiKey, settings.requireApiKey);
-  if (keyGate) return errorResponse(keyGate.status, keyGate.error);
+  if (settings.requireApiKey) {
+    if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
+    const valid = await isValidApiKey(apiKey);
+    if (!valid) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+  }
 
   if (!modelStr) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   if (!body.prompt) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing required field: prompt");

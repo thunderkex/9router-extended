@@ -5,7 +5,7 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  checkApiKeyQuota,
+  isValidApiKey,
 } from "../services/auth.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { getSettings } from "@/lib/localDb";
@@ -91,8 +91,7 @@ export async function handleChat(request, clientRawRequest = null) {
     log.debug("AUTH", "No API key provided (local mode)");
   }
 
-  // API key gate: a known key is subject to its own pause/quota limits even
-  // when keys are not required; an unknown key passes only in local mode.
+  // Enforce API key if enabled in settings
   const settings = await getSettings();
   const isInternalCli = request.headers.get("x-9r-cli-token");
   if (settings.requireApiKey && !isInternalCli) {
@@ -105,10 +104,55 @@ export async function handleChat(request, clientRawRequest = null) {
       log.warn("AUTH", "Invalid API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
     }
-    const keyGate = await checkApiKeyQuota(apiKey, settings.requireApiKey);
-    if (keyGate) {
-      log.warn("AUTH", `${keyGate.error} (key=${log.maskKey(apiKey)})`);
-      return errorResponse(keyGate.status, keyGate.error);
+  }
+
+  if (!modelStr) {
+    log.warn("CHAT", "Missing model");
+    return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
+  }
+
+  // Per-key access control: a restricted key may call only its listed combos and
+  // models. Checked once on the requested target, before bypass, combo expansion
+  // and any credential lookup; an allowed combo grants the members it routes to.
+  const keyAccess = await getKeyAccessContext(request);
+  const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
+  if (keyAccessDenied) return keyAccessDenied;
+
+  // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
+  const userAgent = request?.headers?.get("user-agent") || "";
+  const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
+  if (bypassResponse) return bypassResponse.response || bypassResponse;
+
+  const requiredCapabilities = detectRequiredCapabilities(body);
+
+  // Check if model is a combo (has multiple models with fallback)
+  const comboModels = await getComboModels(modelStr);
+  if (comboModels) {
+    // Check for combo-specific strategy first, fallback to global
+    const comboStrategies = settings.comboStrategies || {};
+    const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
+    const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
+    const augmentedModels = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings), comboModels);
+    const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
+
+    if (comboStrategy === "fusion") {
+      log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: fusion)`);
+      return handleFusionChat({
+        body,
+        models: comboModels,
+        handleSingleModel: (b, m, isPanel) => {
+          let cleanRawReq = clientRawRequest;
+          if (isPanel && clientRawRequest) {
+            const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
+            cleanRawReq = { ...clientRawRequest, body: cleanBody };
+          }
+          return handleSingleModelChat(b, m, cleanRawReq, request, apiKey);
+        },
+        log,
+        comboName: modelStr,
+        judgeModel: comboStrategies[modelStr]?.judgeModel,
+        tuning: comboStrategies[modelStr]?.fusionTuning,
+      });
     }
 
     if (!modelStr) {

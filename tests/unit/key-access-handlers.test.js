@@ -37,7 +37,6 @@ vi.mock("@/sse/services/auth.js", () => ({
     return a?.startsWith("Bearer ") ? a.slice(7) : request.headers.get("x-api-key");
   },
   isValidApiKey: async () => true,
-  checkApiKeyQuota: async () => null,
 }));
 vi.mock("@/sse/services/tokenRefresh.js", () => ({
   checkAndRefreshToken: async (_p, c) => c,

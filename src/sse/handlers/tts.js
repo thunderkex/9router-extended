@@ -1,5 +1,5 @@
 import {
-  extractApiKey, checkApiKeyQuota,
+  extractApiKey, isValidApiKey,
   getProviderCredentials, markAccountUnavailable,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
@@ -34,10 +34,13 @@ export async function handleTts(request) {
   const style = body.style || ""; // Optional style/voice instructions (e.g. Xiaomi MiMo)
   log.request("POST", `${url.pathname} | ${modelStr} | format=${responseFormat}${language ? ` | lang=${language}` : ""}`);
 
-  const apiKey = extractApiKey(request);
   const settings = await getSettings();
-  const keyGate = await checkApiKeyQuota(apiKey, settings.requireApiKey);
-  if (keyGate) return errorResponse(keyGate.status, keyGate.error);
+  if (settings.requireApiKey) {
+    const apiKey = extractApiKey(request);
+    if (!apiKey) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
+    const valid = await isValidApiKey(apiKey);
+    if (!valid) return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+  }
 
   if (!modelStr) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   if (!body.input) return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing required field: input");

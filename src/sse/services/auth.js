@@ -399,35 +399,3 @@ export async function isValidApiKey(apiKey) {
   if (!apiKey) return false;
   return await validateApiKey(apiKey);
 }
-
-/**
- * Quota/pause gate for requests carrying an API key. Independent of
- * settings.requireApiKey: a KNOWN key is always subject to its own limits
- * (pause, token quota), while an unknown key passes when keys are not
- * required (local mode). Model restrictions are enforced separately by
- * keyAccess.js on the resolved target.
- * @param {string|null} apiKey
- * @param {boolean} requireApiKey
- * @returns {Promise<{error: string, status: number} | null>} null = allowed
- */
-export async function checkApiKeyQuota(apiKey, requireApiKey) {
-  const unauthorized = (error) => ({ error, status: 401 });
-  if (!apiKey) {
-    return requireApiKey ? unauthorized("Missing API key") : null;
-  }
-  const { getApiKeyByKey } = await import("@/lib/db/repos/apiKeysRepo.js");
-  const keyRecord = await getApiKeyByKey(apiKey);
-  if (!keyRecord) {
-    return requireApiKey ? unauthorized("Invalid API key") : null;
-  }
-  if (!keyRecord.isActive) {
-    return unauthorized("API key is paused");
-  }
-  if (keyRecord.tokenLimit > 0 && keyRecord.usedTokens >= keyRecord.tokenLimit) {
-    return {
-      error: `Token limit exceeded for this API key (${keyRecord.usedTokens.toLocaleString()} / ${keyRecord.tokenLimit.toLocaleString()} tokens used)`,
-      status: 429,
-    };
-  }
-  return null;
-}
