@@ -182,7 +182,7 @@ export default function CombosPage() {
         setCombos(filtered);
       }
       if (providersRes.ok) {
-        setActiveProviders(providersData.connections || []);
+        setActiveProviders((providersData.connections || []).filter((c) => c.isActive !== false));
       }
       setComboStrategies(settingsData.comboStrategies || {});
       const rawAdapter = settingsData.capacityAdapter || {};
