@@ -5,7 +5,7 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  isValidApiKey,
+  checkApiKeyQuota,
 } from "../services/auth.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { getSettings } from "@/lib/localDb";
@@ -91,7 +91,8 @@ export async function handleChat(request, clientRawRequest = null) {
     log.debug("AUTH", "No API key provided (local mode)");
   }
 
-  // Enforce API key if enabled in settings
+  // API key gate: a known key is subject to its own pause/quota limits even
+  // when keys are not required; an unknown key passes only in local mode.
   const settings = await getSettings();
   const isInternalCli = request.headers.get("x-9r-cli-token");
   if (settings.requireApiKey && !isInternalCli) {
@@ -104,206 +105,130 @@ export async function handleChat(request, clientRawRequest = null) {
       log.warn("AUTH", "Invalid API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
     }
-  }
+    const keyGate = await checkApiKeyQuota(apiKey, settings.requireApiKey);
+    if (keyGate) {
+      log.warn("AUTH", `${keyGate.error} (key=${log.maskKey(apiKey)})`);
+      return errorResponse(keyGate.status, keyGate.error);
+    }
 
-  if (!modelStr) {
-    log.warn("CHAT", "Missing model");
-    return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
-  }
+    if (!modelStr) {
+      log.warn("CHAT", "Missing model");
+      return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
+    }
 
-  // Per-key access control: a restricted key may call only its listed combos and
-  // models. Checked once on the requested target, before bypass, combo expansion
-  // and any credential lookup; an allowed combo grants the members it routes to.
-  const keyAccess = await getKeyAccessContext(request);
-  const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
-  if (keyAccessDenied) return keyAccessDenied;
+    // Per-key access control: a restricted key may call only its listed combos and
+    // models. Checked once on the requested target, before bypass, combo expansion
+    // and any credential lookup; an allowed combo grants the members it routes to.
+    const keyAccess = await getKeyAccessContext(request);
+    const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
+    if (keyAccessDenied) return keyAccessDenied;
 
-  // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
-  const userAgent = request?.headers?.get("user-agent") || "";
-  const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
-  if (bypassResponse) return bypassResponse.response || bypassResponse;
+    // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
+    const userAgent = request?.headers?.get("user-agent") || "";
+    const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
+    if (bypassResponse) return bypassResponse.response || bypassResponse;
 
-  // Auto Plan-Then-Code Orchestration
-  const autoPlanBypass = request.headers.get("x-9router-auto-plan") === "off" || body._skipAutoPlan;
-  if (settings.autoPlanEnabled && !autoPlanBypass) {
-    try {
-      const messages = Array.isArray(body.messages) ? body.messages : [];
-      const classification = await classifyRequest(messages, settings, {
-        handleSingleModelChat: (b, m, raw, req) => handleSingleModelChat(b, m, raw, req, apiKey),
-      });
+    // Auto Plan-Then-Code Orchestration
+    const autoPlanBypass = request.headers.get("x-9router-auto-plan") === "off" || body._skipAutoPlan;
+    if (settings.autoPlanEnabled && !autoPlanBypass) {
+      try {
+        const messages = Array.isArray(body.messages) ? body.messages : [];
+        const classification = await classifyRequest(messages, settings, {
+          handleSingleModelChat: (b, m, raw, req) => handleSingleModelChat(b, m, raw, req, apiKey),
+        });
 
-      if (classification.needsPlan) {
-        const allCombos = await getCombos();
-        const planCombo = resolvePlanCombo(allCombos, settings);
+        if (classification.needsPlan) {
+          const allCombos = await getCombos();
+          const planCombo = resolvePlanCombo(allCombos, settings);
 
-        if (planCombo && Array.isArray(planCombo.models) && planCombo.models.length > 0) {
-          log.info("AUTO-PLAN", `Triggering architecture plan via combo "${planCombo.name}" (score ${classification.score})`);
+          if (planCombo && Array.isArray(planCombo.models) && planCombo.models.length > 0) {
+            log.info("AUTO-PLAN", `Triggering architecture plan via combo "${planCombo.name}" (score ${classification.score})`);
 
-          // Clone messages and inject condensed plan instructions
-          const planMessages = [
-            { role: "system", content: CONDENSED_PLAN_PROMPT },
-            ...messages.filter((m) => m && m.role !== "system"),
-          ];
+            // Clone messages and inject condensed plan instructions
+            const planMessages = [
+              { role: "system", content: CONDENSED_PLAN_PROMPT },
+              ...messages.filter((m) => m && m.role !== "system"),
+            ];
 
-          const planBody = {
-            ...body,
-            messages: planMessages,
-            max_tokens: settings.autoPlanMaxTokens || 800,
-            stream: false,
-            _skipAutoPlan: true,
-          };
+            const planBody = {
+              ...body,
+              messages: planMessages,
+              max_tokens: settings.autoPlanMaxTokens || 800,
+              stream: false,
+              _skipAutoPlan: true,
+            };
 
-          const timeoutMs = settings.autoPlanTimeoutMs || 15000;
-          const planPromise = (async () => {
-            const planComboModels = await getComboModels(planCombo.name) || planCombo.models.map(m => typeof m === "string" ? m : m.id);
-            return handleComboChat({
-              body: planBody,
-              models: planComboModels,
-              handleSingleModel: (b, m) => handleSingleModelChat(b, m, null, request, apiKey),
-              log,
-              comboName: planCombo.name,
-              comboStrategy: "fallback",
-            });
-          })();
+            const timeoutMs = settings.autoPlanTimeoutMs || 15000;
+            const planPromise = (async () => {
+              const planComboModels = await getComboModels(planCombo.name) || planCombo.models.map(m => typeof m === "string" ? m : m.id);
+              return handleComboChat({
+                body: planBody,
+                models: planComboModels,
+                handleSingleModel: (b, m) => handleSingleModelChat(b, m, null, request, apiKey),
+                log,
+                comboName: planCombo.name,
+                comboStrategy: "fallback",
+              });
+            })();
 
-          let planResponse = null;
-          try {
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Plan generation timeout")), timeoutMs));
-            planResponse = await Promise.race([planPromise, timeoutPromise]);
-          } catch (planErr) {
-            log.warn("AUTO-PLAN", `Plan generation timed out or failed (${planErr.message}), failing open`);
-          }
-
-          if (planResponse && planResponse.ok) {
-            let planText = "";
-            let planTokens = 0;
+            let planResponse = null;
             try {
-              const planJson = await planResponse.json();
-              planText = planJson.choices?.[0]?.message?.content || "";
-              planTokens = planJson.usage?.total_tokens || 0;
-            } catch { }
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Plan generation timeout")), timeoutMs));
+              planResponse = await Promise.race([planPromise, timeoutPromise]);
+            } catch (planErr) {
+              log.warn("AUTO-PLAN", `Plan generation timed out or failed (${planErr.message}), failing open`);
+            }
 
-            if (planText) {
-              log.info("AUTO-PLAN", `Plan generated successfully (${planTokens} tokens)`);
-              // Inject generated plan into original messages
-              body.messages = injectPlan(body.messages, planText);
-              // Store metadata for observability & logging
-              if (clientRawRequest) {
-                clientRawRequest.autoPlan = {
-                  triggered: true,
-                  succeeded: true,
-                  score: classification.score,
-                  planTokens,
-                  combo: planCombo.name,
-                };
-              }
+            if (planResponse && planResponse.ok) {
+              let planText = "";
+              let planTokens = 0;
+              try {
+                const planJson = await planResponse.json();
+                planText = planJson.choices?.[0]?.message?.content || "";
+                planTokens = planJson.usage?.total_tokens || 0;
+              } catch { }
 
-              // If manual code combo is configured, route to it
-              const codeCombo = resolveCodeCombo(allCombos, settings, modelStr);
-              if (codeCombo && codeCombo.name !== modelStr) {
-                log.info("AUTO-PLAN", `Routing code implementation to Combo "${codeCombo.name}"`);
-                modelStr = codeCombo.name;
-                body.model = codeCombo.name;
+              if (planText) {
+                log.info("AUTO-PLAN", `Plan generated successfully (${planTokens} tokens)`);
+                // Inject generated plan into original messages
+                body.messages = injectPlan(body.messages, planText);
+                // Store metadata for observability & logging
+                if (clientRawRequest) {
+                  clientRawRequest.autoPlan = {
+                    triggered: true,
+                    succeeded: true,
+                    score: classification.score,
+                    planTokens,
+                    combo: planCombo.name,
+                  };
+                }
+
+                // If manual code combo is configured, route to it
+                const codeCombo = resolveCodeCombo(allCombos, settings, modelStr);
+                if (codeCombo && codeCombo.name !== modelStr) {
+                  log.info("AUTO-PLAN", `Routing code implementation to Combo "${codeCombo.name}"`);
+                  modelStr = codeCombo.name;
+                  body.model = codeCombo.name;
+                }
               }
             }
           }
         }
+      } catch (err) {
+        log.warn("AUTO-PLAN", `Auto-plan failed open: ${err.message}`);
       }
-    } catch (err) {
-      log.warn("AUTO-PLAN", `Auto-plan failed open: ${err.message}`);
-    }
-  }
-
-  const requiredCapabilities = detectRequiredCapabilities(body);
-
-  // Check if model is a combo (has multiple models with fallback)
-  const comboModels = await getComboModels(modelStr);
-  if (comboModels) {
-    // Check for combo-specific strategy first, fallback to global
-    const comboStrategies = settings.comboStrategies || {};
-    const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
-    const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
-    const augmentedModels = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings), comboModels);
-    const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
-
-    if (comboStrategy === "fusion") {
-      log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: fusion)`);
-      return handleFusionChat({
-        body,
-        models: comboModels,
-        handleSingleModel: (b, m, isPanel) => {
-          let cleanRawReq = clientRawRequest;
-          if (isPanel && clientRawRequest) {
-            const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
-            cleanRawReq = { ...clientRawRequest, body: cleanBody };
-          }
-          return handleSingleModelChat(b, m, cleanRawReq, request, apiKey);
-        },
-        log,
-        comboName: modelStr,
-        judgeModel: comboStrategies[modelStr]?.judgeModel,
-        tuning: comboStrategies[modelStr]?.fusionTuning,
-      });
     }
 
-    const comboStickyLimit = settings.comboStickyRoundRobinLimit;
-    log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
-    return handleComboChat({
-      body,
-      models: augmentedModels,
-      handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
-        adapterAdded
-      ),
-      log,
-      comboName: modelStr,
-      comboStrategy,
-      comboStickyLimit
-    });
-  }
+    const requiredCapabilities = detectRequiredCapabilities(body);
 
-  // Single model request — may still switch to a capacity-adapter model if the
-  // target lacks a capability the request needs (e.g. no vision, request has an image).
-  const soloAugmented = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter([modelStr], requiredCapabilities, settings), [modelStr]);
-  if (soloAugmented.length > 1) {
-    const adapterAdded = soloAugmented.filter((m) => m !== modelStr);
-    log.info("CHAT", `Capacity adapter for [${[...requiredCapabilities].join(",")}] on "${modelStr}" → trying ${soloAugmented.join(", ")}`);
-    return handleComboChat({
-      body,
-      models: soloAugmented,
-      handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
-        adapterAdded
-      ),
-      log,
-      comboName: modelStr,
-      comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings)
-    });
-  }
-
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null);
-}
-
-/**
- * Handle single model chat request
- */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, requestedModel = null) {
-  const modelInfo = await getModelInfo(modelStr);
-
-  // If provider is null, this might be a combo name - check and handle
-  if (!modelInfo.provider) {
+    // Check if model is a combo (has multiple models with fallback)
     const comboModels = await getComboModels(modelStr);
     if (comboModels) {
-      const chatSettings = await getSettings();
       // Check for combo-specific strategy first, fallback to global
-      const comboStrategies = chatSettings.comboStrategies || {};
+      const comboStrategies = settings.comboStrategies || {};
       const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
-      const comboStrategy = comboSpecificStrategy || chatSettings.comboStrategy || "fallback";
-      const requiredCapabilities = detectRequiredCapabilities(body);
-      // Nested combo (a combo member that is itself a combo): the access decision
-      // was made on the outer target; only drop adapter models the key may not call.
-      const keyAccess = await getKeyAccessContext(request);
-      const augmentedModels = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, chatSettings), comboModels);
+      const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
+      const augmentedModels = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, settings), comboModels);
       const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
 
       if (comboStrategy === "fusion") {
@@ -326,7 +251,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         });
       }
 
-      const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
+      const comboStickyLimit = settings.comboStickyRoundRobinLimit;
       log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
       return handleComboChat({
         body,
@@ -341,330 +266,410 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         comboStickyLimit
       });
     }
-    log.warn("CHAT", "Invalid model format", { model: modelStr });
-    return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid model format");
+
+    // Single model request — may still switch to a capacity-adapter model if the
+    // target lacks a capability the request needs (e.g. no vision, request has an image).
+    const soloAugmented = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter([modelStr], requiredCapabilities, settings), [modelStr]);
+    if (soloAugmented.length > 1) {
+      const adapterAdded = soloAugmented.filter((m) => m !== modelStr);
+      log.info("CHAT", `Capacity adapter for [${[...requiredCapabilities].join(",")}] on "${modelStr}" → trying ${soloAugmented.join(", ")}`);
+      return handleComboChat({
+        body,
+        models: soloAugmented,
+        handleSingleModel: withCapacityAdapterStripping(
+          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+          adapterAdded
+        ),
+        log,
+        comboName: modelStr,
+        comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings)
+      });
+    }
+
+    return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null);
   }
 
-  const { provider, model } = modelInfo;
+  /**
+   * Handle single model chat request
+   */
+  async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, requestedModel = null) {
+    const modelInfo = await getModelInfo(modelStr);
 
-  // Routing shown in the unified "▶" line (client model → provider/model)
+    // If provider is null, this might be a combo name - check and handle
+    if (!modelInfo.provider) {
+      const comboModels = await getComboModels(modelStr);
+      if (comboModels) {
+        const chatSettings = await getSettings();
+        // Check for combo-specific strategy first, fallback to global
+        const comboStrategies = chatSettings.comboStrategies || {};
+        const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
+        const comboStrategy = comboSpecificStrategy || chatSettings.comboStrategy || "fallback";
+        const requiredCapabilities = detectRequiredCapabilities(body);
+        // Nested combo (a combo member that is itself a combo): the access decision
+        // was made on the outer target; only drop adapter models the key may not call.
+        const keyAccess = await getKeyAccessContext(request);
+        const augmentedModels = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter(comboModels, requiredCapabilities, chatSettings), comboModels);
+        const adapterAdded = augmentedModels.filter((m) => !comboModels.includes(m));
 
-  // Extract userAgent from request
-  const userAgent = request?.headers?.get("user-agent") || "";
-
-  // Try with available accounts (fallback on errors)
-  const excludeConnectionIds = new Set();
-  let lastError = null;
-  let lastStatus = null;
-  let lastHeaders = null;
-
-  while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { requestedModel: requestedModel || model });
-
-    // All accounts unavailable
-    if (!credentials || credentials.allRateLimited) {
-      if (credentials?.allRateLimited) {
-        const errorMsg = lastError || credentials.lastError || "Unavailable";
-        const status = HTTP_STATUS.SERVICE_UNAVAILABLE;
-        log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
-        return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman, lastHeaders);
-      }
-      if (excludeConnectionIds.size === 0) {
-        log.warn("AUTH", `No active credentials for provider: ${provider}`);
-        return errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`);
-      }
-      log.warn("CHAT", "No more accounts available", { provider });
-      return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable", lastHeaders);
-    }
-
-    // Account selection shown in the unified "▶" line (acc:...)
-    const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
-
-    // Ensure real project ID is available for providers that need it (P0 fix: cold miss)
-    if ((provider === "antigravity" || provider === "gemini-cli") && !refreshedCredentials.projectId) {
-      const pid = await getProjectIdForConnection(credentials.connectionId, refreshedCredentials.accessToken, provider);
-      if (pid) {
-        refreshedCredentials.projectId = pid;
-        // Persist to DB in background so subsequent requests have it immediately
-        updateProviderCredentials(credentials.connectionId, { projectId: pid }).catch(() => { });
-      }
-    }
-
-    // Use shared chatCore
-    const chatSettings = await getSettings();
-    const t0 = Date.now();
-    const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
-
-    // Resolve generic active prompts
-    const manifests = await getSkillManifests();
-    const activeGenericPrompts = [];
-
-    const sessionId = clientRawRequest?.headers?.["x-session-id"] || clientRawRequest?.headers?.["session-id"] || null;
-    if (sessionId && hasPriorFailover(sessionId)) {
-      activeGenericPrompts.push({ id: "continuity-notice", prompt: CONTINUITY_NOTICE });
-    }
-    for (const skill of manifests) {
-      const isRoutableCandidate =
-        skill.routable === true ||
-        (Array.isArray(skill.config_schema) && skill.config_schema.some((c) => c.key === "routing_mode"));
-      const routingMode =
-        chatSettings[`${skill.id}RoutingMode`] ??
-        chatSettings[`${skill.id}_routing_mode`] ??
-        skill.config_schema?.find((c) => c.key === "routing_mode")?.default ??
-        (skill.routable ? "smart" : "always");
-
-      if (
-        skill.hook === "system-prompt" &&
-        skill.id !== "caveman" &&
-        skill.id !== "ponytail" &&
-        skill.id !== "ecc-auto-skill-router" &&
-        skill.id !== "hermes-toolkit" &&
-        !(isRoutableCandidate && routingMode === "smart")
-      ) {
-        const enabledKey = skill.legacy_enabled_key || `${skill.id}Enabled`;
-        const isEnabled = chatSettings[enabledKey] !== undefined ? !!chatSettings[enabledKey] : !!skill.default_enabled;
-        if (isEnabled && skill.prompt_template) {
-          let prompt = skill.prompt_template;
-          if (Array.isArray(skill.config_schema) && skill.config_schema.length > 0) {
-            const paramLines = [];
-            for (const cfg of skill.config_schema) {
-              if (cfg.key === "routing_mode") continue;
-              const key = cfg.legacy_key || cfg.key;
-              const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
-              if (prompt.includes(`{${cfg.key}}`)) {
-                prompt = prompt.replace(new RegExp(`\\{${cfg.key}\\}`, "g"), val);
-              } else {
-                paramLines.push(`- ${cfg.label || cfg.key}: ${val}${cfg.type === "slider" ? ` (scale ${cfg.min ?? 1}-${cfg.max ?? 10})` : ""}`);
+        if (comboStrategy === "fusion") {
+          log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: fusion)`);
+          return handleFusionChat({
+            body,
+            models: comboModels,
+            handleSingleModel: (b, m, isPanel) => {
+              let cleanRawReq = clientRawRequest;
+              if (isPanel && clientRawRequest) {
+                const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
+                cleanRawReq = { ...clientRawRequest, body: cleanBody };
               }
-            }
-            if (paramLines.length > 0) {
-              prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
-            }
-          }
-          activeGenericPrompts.push({ id: skill.id, prompt });
-        }
-      }
-    }
-
-    // Hermes Agent Memory Injection
-    const hermesBypass = clientRawRequest?.headers?.[HERMES_MEMORY_BYPASS_HEADER]?.toLowerCase() === "off" ||
-      clientRawRequest?.headers?.["x-9router-hermes-memory"]?.toLowerCase() === "off";
-
-    const hermesToolkitEnabled = !hermesBypass && (
-      chatSettings["hermes-toolkitEnabled"] !== undefined
-        ? !!chatSettings["hermes-toolkitEnabled"]
-        : chatSettings.hermesToolkitEnabled !== undefined
-          ? !!chatSettings.hermesToolkitEnabled
-          : true
-    );
-
-    let hermesMemoryInjected = false;
-    if (hermesToolkitEnabled) {
-      try {
-        const hermesBlock = await getHermesSystemPromptBlock();
-        if (hermesBlock) {
-          activeGenericPrompts.push({ id: "hermes-toolkit", prompt: hermesBlock });
-          hermesMemoryInjected = true;
-        }
-      } catch (err) {
-        log.warn("HERMES", `Hermes memory read failed (fail-open): ${err.message}`);
-      }
-    }
-
-    // ECC Auto Skill Router: dynamically match query and inject prompt
-    const eccBypass = clientRawRequest?.headers?.[ECC_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off" || clientRawRequest?.headers?.["x-9router-skill-router"]?.toLowerCase() === "off";
-    const eccRouterEnabled = !eccBypass && (
-      chatSettings.ecc_auto_skill_routerEnabled !== undefined
-        ? !!chatSettings.ecc_auto_skill_routerEnabled
-        : !!chatSettings["ecc-auto-skill-routerEnabled"]
-    );
-
-    if (eccRouterEnabled) {
-      try {
-        const threshold = chatSettings.ecc_auto_skill_routerConfidence !== undefined
-          ? Number(chatSettings.ecc_auto_skill_routerConfidence)
-          : chatSettings.confidence_threshold !== undefined
-            ? Number(chatSettings.confidence_threshold)
-            : 0.35;
-        const maxSkills = chatSettings.ecc_auto_skill_routerMaxSkills !== undefined
-          ? Number(chatSettings.ecc_auto_skill_routerMaxSkills)
-          : chatSettings.max_skills !== undefined
-            ? Number(chatSettings.max_skills)
-            : 1;
-        const matches = await classifyPrompt(body, { threshold, maxSkills });
-        const matchedSkills = [];
-
-        if (matches && matches.length > 0) {
-          for (const match of matches) {
-            const promptContent = await loadSkillPrompt(match.folder);
-            if (promptContent && promptContent.trim()) {
-              const alreadyInjected = sessionId && markSkillInjected(sessionId, `ecc-${match.folder}`);
-              const formattedPrompt = alreadyInjected
-                ? formatSkillReminder(match.name)
-                : formatSkillInjection(match, promptContent);
-              activeGenericPrompts.push({ id: `ecc-${match.name}`, prompt: formattedPrompt });
-              matchedSkills.push({ name: match.name, score: match.score, folder: match.folder });
-              if (process.env.ENABLE_REQUEST_LOGS === "true") {
-                log.info("ECC-ROUTER", `[ecc-auto-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        log.warn("ECC-ROUTER", `Classification failed (fail-open): ${err.message}`);
-      }
-    }
-    // Local Skill Router: topic-aware injection for routable local skills
-    const localRouterBypass = clientRawRequest?.headers?.[LOCAL_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off";
-    if (!localRouterBypass) {
-      try {
-        const localMatches = await classifyLocalSkills(body, chatSettings);
-        for (const match of localMatches) {
-          let prompt = match.prompt_template;
-          const skill = match.skill;
-          if (Array.isArray(skill?.config_schema) && skill.config_schema.length > 0) {
-            const paramLines = [];
-            for (const cfg of skill.config_schema) {
-              if (cfg.key === "routing_mode") continue;
-              const key = cfg.legacy_key || cfg.key;
-              const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
-              if (prompt.includes(`{${cfg.key}}`)) {
-                prompt = prompt.replace(new RegExp(`\\{${cfg.key}\\}`, "g"), val);
-              } else {
-                paramLines.push(`- ${cfg.label || cfg.key}: ${val}${cfg.type === "slider" ? ` (scale ${cfg.min ?? 1}-${cfg.max ?? 10})` : ""}`);
-              }
-            }
-            if (paramLines.length > 0) prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
-          }
-          const alreadyInjectedLocal = sessionId && markSkillInjected(sessionId, `local-${match.id}`);
-          if (alreadyInjectedLocal) prompt = formatSkillReminder(match.name, "Local Skill");
-          activeGenericPrompts.push({ id: `local-${match.id}`, prompt });
-          if (process.env.ENABLE_REQUEST_LOGS === "true") {
-            log.info("LOCAL-SKILL-ROUTER", `[local-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
-          }
-        }
-      } catch (err) {
-        log.warn("LOCAL-SKILL-ROUTER", `Local skill classification failed (fail-open): ${err.message}`);
-      }
-    }
-    const matchedSkills = activeGenericPrompts
-      .filter((p) => p.id && p.id.startsWith("ecc-"))
-      .map((p) => ({ name: p.id.replace(/^ecc-/, "") }));
-
-    const result = await handleChatCore({
-      body: { ...body, model: `${provider}/${model}` },
-      modelInfo: { provider, model },
-      credentials: refreshedCredentials,
-      log,
-      clientRawRequest,
-      connectionId: credentials.connectionId,
-      userAgent,
-      apiKey,
-      autoPlan: clientRawRequest?.autoPlan || undefined,
-      eccSkills: matchedSkills.length > 0 ? matchedSkills : undefined,
-      ccFilterNaming: !!chatSettings.ccFilterNaming,
-      rtkEnabled: !!chatSettings.rtkEnabled,
-      headroomEnabled: !!chatSettings.headroomEnabled,
-      headroomUrl: chatSettings.headroomUrl || DEFAULT_HEADROOM_URL,
-      headroomCompressUserMessages: !!chatSettings.headroomCompressUserMessages,
-      headroomTimeoutMs: chatSettings.headroomTimeoutMs,
-      cavemanEnabled: !!chatSettings.cavemanEnabled,
-      cavemanLevel: chatSettings.cavemanLevel || "full",
-      ponytailEnabled: !!chatSettings.ponytailEnabled,
-      ponytailLevel: chatSettings.ponytailLevel || "full",
-      pxpipeEnabled: !!chatSettings.pxpipeEnabled,
-      pxpipeMinChars: chatSettings.pxpipeMinChars,
-      pxpipeTimeoutMs: chatSettings.pxpipeTimeoutMs,
-      // Lazily warms the in-process module on first use; null when not installed (fail-open)
-      pxpipeTransform: chatSettings.pxpipeEnabled ? await getPxpipeTransform() : null,
-      onPxpipeEvent: appendPxpipeEvent,
-      // Phase 4: sliding-window token trimmer
-      trimEnabled: !!chatSettings.tokenSaverEnabled,
-      trimBudget: chatSettings.tokenSaverBudget || 80000,
-      providerThinking,
-      activeGenericPrompts,
-      // Per-provider user overrides (custom headers / connect timeout) from settings
-      providerOverrides: (chatSettings.providerOverrides || {})[provider] || null,
-      // Detect source format by endpoint + body
-      sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
-      onCredentialsRefreshed: async (newCreds) => {
-        await updateProviderCredentials(credentials.connectionId, {
-          ...newCreds,
-          existingProviderSpecificData: credentials.providerSpecificData,
-          testStatus: "active"
-        });
-      },
-      onRequestSuccess: async () => {
-        await clearAccountError(credentials.connectionId, credentials, model);
-        // "Consecutive" strikes: a success clears the breaker for this pair.
-        clearAntigravityStrikes(credentials.connectionId, model);
-      }
-    });
-
-    if (result.success) {
-      healthRecord(provider, { success: true, latencyMs: Date.now() - t0 });
-
-      // Add trace headers
-      try {
-        if (result.response && result.response.headers) {
-          result.response.headers.set("x-9r-hermes-memory", hermesMemoryInjected ? "hit" : "miss");
-        }
-      } catch { }
-
-      // Asynchronous smart memory extraction
-      if (hermesToolkitEnabled) {
-        const lastUserText = typeof body === "object" ? (
-          Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === "user").pop()?.content :
-            Array.isArray(body.input) ? body.input.filter((i) => i && i.role === "user").pop()?.content :
-              null
-        ) : null;
-
-        if (typeof lastUserText === "string") {
-          triggerHermesExtraction({
-            text: lastUserText,
-            sessionId,
-            settings: chatSettings,
-            handleSingleModelChat: (b, m, raw, req, k) => handleSingleModelChat(b, m, raw, req, k),
-            apiKey,
+              return handleSingleModelChat(b, m, cleanRawReq, request, apiKey);
+            },
             log,
+            comboName: modelStr,
+            judgeModel: comboStrategies[modelStr]?.judgeModel,
+            tuning: comboStrategies[modelStr]?.fusionTuning,
           });
         }
+
+        const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
+        log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+        return handleComboChat({
+          body,
+          models: augmentedModels,
+          handleSingleModel: withCapacityAdapterStripping(
+            (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+            adapterAdded
+          ),
+          log,
+          comboName: modelStr,
+          comboStrategy,
+          comboStickyLimit
+        });
+      }
+      log.warn("CHAT", "Invalid model format", { model: modelStr });
+      return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid model format");
+    }
+
+    const { provider, model } = modelInfo;
+
+    // Routing shown in the unified "▶" line (client model → provider/model)
+
+    // Extract userAgent from request
+    const userAgent = request?.headers?.get("user-agent") || "";
+
+    // Try with available accounts (fallback on errors)
+    const excludeConnectionIds = new Set();
+    let lastError = null;
+    let lastStatus = null;
+    let lastHeaders = null;
+
+    while (true) {
+      const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { requestedModel: requestedModel || model });
+
+      // All accounts unavailable
+      if (!credentials || credentials.allRateLimited) {
+        if (credentials?.allRateLimited) {
+          const errorMsg = lastError || credentials.lastError || "Unavailable";
+          const status = HTTP_STATUS.SERVICE_UNAVAILABLE;
+          log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
+          return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman, lastHeaders);
+        }
+        if (excludeConnectionIds.size === 0) {
+          log.warn("AUTH", `No active credentials for provider: ${provider}`);
+          return errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`);
+        }
+        log.warn("CHAT", "No more accounts available", { provider });
+        return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable", lastHeaders);
+      }
+
+      // Account selection shown in the unified "▶" line (acc:...)
+      const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
+
+      // Ensure real project ID is available for providers that need it (P0 fix: cold miss)
+      if ((provider === "antigravity" || provider === "gemini-cli") && !refreshedCredentials.projectId) {
+        const pid = await getProjectIdForConnection(credentials.connectionId, refreshedCredentials.accessToken, provider);
+        if (pid) {
+          refreshedCredentials.projectId = pid;
+          // Persist to DB in background so subsequent requests have it immediately
+          updateProviderCredentials(credentials.connectionId, { projectId: pid }).catch(() => { });
+        }
+      }
+
+      // Use shared chatCore
+      const chatSettings = await getSettings();
+      const t0 = Date.now();
+      const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
+
+      // Resolve generic active prompts
+      const manifests = await getSkillManifests();
+      const activeGenericPrompts = [];
+
+      const sessionId = clientRawRequest?.headers?.["x-session-id"] || clientRawRequest?.headers?.["session-id"] || null;
+      if (sessionId && hasPriorFailover(sessionId)) {
+        activeGenericPrompts.push({ id: "continuity-notice", prompt: CONTINUITY_NOTICE });
+      }
+      for (const skill of manifests) {
+        const isRoutableCandidate =
+          skill.routable === true ||
+          (Array.isArray(skill.config_schema) && skill.config_schema.some((c) => c.key === "routing_mode"));
+        const routingMode =
+          chatSettings[`${skill.id}RoutingMode`] ??
+          chatSettings[`${skill.id}_routing_mode`] ??
+          skill.config_schema?.find((c) => c.key === "routing_mode")?.default ??
+          (skill.routable ? "smart" : "always");
+
+        if (
+          skill.hook === "system-prompt" &&
+          skill.id !== "caveman" &&
+          skill.id !== "ponytail" &&
+          skill.id !== "ecc-auto-skill-router" &&
+          skill.id !== "hermes-toolkit" &&
+          !(isRoutableCandidate && routingMode === "smart")
+        ) {
+          const enabledKey = skill.legacy_enabled_key || `${skill.id}Enabled`;
+          const isEnabled = chatSettings[enabledKey] !== undefined ? !!chatSettings[enabledKey] : !!skill.default_enabled;
+          if (isEnabled && skill.prompt_template) {
+            let prompt = skill.prompt_template;
+            if (Array.isArray(skill.config_schema) && skill.config_schema.length > 0) {
+              const paramLines = [];
+              for (const cfg of skill.config_schema) {
+                if (cfg.key === "routing_mode") continue;
+                const key = cfg.legacy_key || cfg.key;
+                const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
+                if (prompt.includes(`{${cfg.key}}`)) {
+                  prompt = prompt.replace(new RegExp(`\\{${cfg.key}\\}`, "g"), val);
+                } else {
+                  paramLines.push(`- ${cfg.label || cfg.key}: ${val}${cfg.type === "slider" ? ` (scale ${cfg.min ?? 1}-${cfg.max ?? 10})` : ""}`);
+                }
+              }
+              if (paramLines.length > 0) {
+                prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
+              }
+            }
+            activeGenericPrompts.push({ id: skill.id, prompt });
+          }
+        }
+      }
+
+      // Hermes Agent Memory Injection
+      const hermesBypass = clientRawRequest?.headers?.[HERMES_MEMORY_BYPASS_HEADER]?.toLowerCase() === "off" ||
+        clientRawRequest?.headers?.["x-9router-hermes-memory"]?.toLowerCase() === "off";
+
+      const hermesToolkitEnabled = !hermesBypass && (
+        chatSettings["hermes-toolkitEnabled"] !== undefined
+          ? !!chatSettings["hermes-toolkitEnabled"]
+          : chatSettings.hermesToolkitEnabled !== undefined
+            ? !!chatSettings.hermesToolkitEnabled
+            : true
+      );
+
+      let hermesMemoryInjected = false;
+      if (hermesToolkitEnabled) {
+        try {
+          const hermesBlock = await getHermesSystemPromptBlock();
+          if (hermesBlock) {
+            activeGenericPrompts.push({ id: "hermes-toolkit", prompt: hermesBlock });
+            hermesMemoryInjected = true;
+          }
+        } catch (err) {
+          log.warn("HERMES", `Hermes memory read failed (fail-open): ${err.message}`);
+        }
+      }
+
+      // ECC Auto Skill Router: dynamically match query and inject prompt
+      const eccBypass = clientRawRequest?.headers?.[ECC_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off" || clientRawRequest?.headers?.["x-9router-skill-router"]?.toLowerCase() === "off";
+      const eccRouterEnabled = !eccBypass && (
+        chatSettings.ecc_auto_skill_routerEnabled !== undefined
+          ? !!chatSettings.ecc_auto_skill_routerEnabled
+          : !!chatSettings["ecc-auto-skill-routerEnabled"]
+      );
+
+      if (eccRouterEnabled) {
+        try {
+          const threshold = chatSettings.ecc_auto_skill_routerConfidence !== undefined
+            ? Number(chatSettings.ecc_auto_skill_routerConfidence)
+            : chatSettings.confidence_threshold !== undefined
+              ? Number(chatSettings.confidence_threshold)
+              : 0.35;
+          const maxSkills = chatSettings.ecc_auto_skill_routerMaxSkills !== undefined
+            ? Number(chatSettings.ecc_auto_skill_routerMaxSkills)
+            : chatSettings.max_skills !== undefined
+              ? Number(chatSettings.max_skills)
+              : 1;
+          const matches = await classifyPrompt(body, { threshold, maxSkills });
+          const matchedSkills = [];
+
+          if (matches && matches.length > 0) {
+            for (const match of matches) {
+              const promptContent = await loadSkillPrompt(match.folder);
+              if (promptContent && promptContent.trim()) {
+                const alreadyInjected = sessionId && markSkillInjected(sessionId, `ecc-${match.folder}`);
+                const formattedPrompt = alreadyInjected
+                  ? formatSkillReminder(match.name)
+                  : formatSkillInjection(match, promptContent);
+                activeGenericPrompts.push({ id: `ecc-${match.name}`, prompt: formattedPrompt });
+                matchedSkills.push({ name: match.name, score: match.score, folder: match.folder });
+                if (process.env.ENABLE_REQUEST_LOGS === "true") {
+                  log.info("ECC-ROUTER", `[ecc-auto-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          log.warn("ECC-ROUTER", `Classification failed (fail-open): ${err.message}`);
+        }
+      }
+      // Local Skill Router: topic-aware injection for routable local skills
+      const localRouterBypass = clientRawRequest?.headers?.[LOCAL_ROUTER_BYPASS_HEADER]?.toLowerCase() === "off";
+      if (!localRouterBypass) {
+        try {
+          const localMatches = await classifyLocalSkills(body, chatSettings);
+          for (const match of localMatches) {
+            let prompt = match.prompt_template;
+            const skill = match.skill;
+            if (Array.isArray(skill?.config_schema) && skill.config_schema.length > 0) {
+              const paramLines = [];
+              for (const cfg of skill.config_schema) {
+                if (cfg.key === "routing_mode") continue;
+                const key = cfg.legacy_key || cfg.key;
+                const val = chatSettings[key] !== undefined ? chatSettings[key] : cfg.default;
+                if (prompt.includes(`{${cfg.key}}`)) {
+                  prompt = prompt.replace(new RegExp(`\\{${cfg.key}\\}`, "g"), val);
+                } else {
+                  paramLines.push(`- ${cfg.label || cfg.key}: ${val}${cfg.type === "slider" ? ` (scale ${cfg.min ?? 1}-${cfg.max ?? 10})` : ""}`);
+                }
+              }
+              if (paramLines.length > 0) prompt += `\n\nActive Configuration:\n${paramLines.join("\n")}`;
+            }
+            const alreadyInjectedLocal = sessionId && markSkillInjected(sessionId, `local-${match.id}`);
+            if (alreadyInjectedLocal) prompt = formatSkillReminder(match.name, "Local Skill");
+            activeGenericPrompts.push({ id: `local-${match.id}`, prompt });
+            if (process.env.ENABLE_REQUEST_LOGS === "true") {
+              log.info("LOCAL-SKILL-ROUTER", `[local-skill-router] Matched skill: ${match.name} (confidence ${match.score})`);
+            }
+          }
+        } catch (err) {
+          log.warn("LOCAL-SKILL-ROUTER", `Local skill classification failed (fail-open): ${err.message}`);
+        }
+      }
+      const matchedSkills = activeGenericPrompts
+        .filter((p) => p.id && p.id.startsWith("ecc-"))
+        .map((p) => ({ name: p.id.replace(/^ecc-/, "") }));
+
+      const result = await handleChatCore({
+        body: { ...body, model: `${provider}/${model}` },
+        modelInfo: { provider, model },
+        credentials: refreshedCredentials,
+        log,
+        clientRawRequest,
+        connectionId: credentials.connectionId,
+        userAgent,
+        apiKey,
+        autoPlan: clientRawRequest?.autoPlan || undefined,
+        eccSkills: matchedSkills.length > 0 ? matchedSkills : undefined,
+        ccFilterNaming: !!chatSettings.ccFilterNaming,
+        rtkEnabled: !!chatSettings.rtkEnabled,
+        headroomEnabled: !!chatSettings.headroomEnabled,
+        headroomUrl: chatSettings.headroomUrl || DEFAULT_HEADROOM_URL,
+        headroomCompressUserMessages: !!chatSettings.headroomCompressUserMessages,
+        headroomTimeoutMs: chatSettings.headroomTimeoutMs,
+        cavemanEnabled: !!chatSettings.cavemanEnabled,
+        cavemanLevel: chatSettings.cavemanLevel || "full",
+        ponytailEnabled: !!chatSettings.ponytailEnabled,
+        ponytailLevel: chatSettings.ponytailLevel || "full",
+        pxpipeEnabled: !!chatSettings.pxpipeEnabled,
+        pxpipeMinChars: chatSettings.pxpipeMinChars,
+        pxpipeTimeoutMs: chatSettings.pxpipeTimeoutMs,
+        // Lazily warms the in-process module on first use; null when not installed (fail-open)
+        pxpipeTransform: chatSettings.pxpipeEnabled ? await getPxpipeTransform() : null,
+        onPxpipeEvent: appendPxpipeEvent,
+        // Phase 4: sliding-window token trimmer
+        trimEnabled: !!chatSettings.tokenSaverEnabled,
+        trimBudget: chatSettings.tokenSaverBudget || 80000,
+        providerThinking,
+        activeGenericPrompts,
+        // Per-provider user overrides (custom headers / connect timeout) from settings
+        providerOverrides: (chatSettings.providerOverrides || {})[provider] || null,
+        // Detect source format by endpoint + body
+        sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
+        onCredentialsRefreshed: async (newCreds) => {
+          await updateProviderCredentials(credentials.connectionId, {
+            ...newCreds,
+            existingProviderSpecificData: credentials.providerSpecificData,
+            testStatus: "active"
+          });
+        },
+        onRequestSuccess: async () => {
+          await clearAccountError(credentials.connectionId, credentials, model);
+          // "Consecutive" strikes: a success clears the breaker for this pair.
+          clearAntigravityStrikes(credentials.connectionId, model);
+        }
+      });
+
+      if (result.success) {
+        healthRecord(provider, { success: true, latencyMs: Date.now() - t0 });
+
+        // Add trace headers
+        try {
+          if (result.response && result.response.headers) {
+            result.response.headers.set("x-9r-hermes-memory", hermesMemoryInjected ? "hit" : "miss");
+          }
+        } catch { }
+
+        // Asynchronous smart memory extraction
+        if (hermesToolkitEnabled) {
+          const lastUserText = typeof body === "object" ? (
+            Array.isArray(body.messages) ? body.messages.filter((m) => m && m.role === "user").pop()?.content :
+              Array.isArray(body.input) ? body.input.filter((i) => i && i.role === "user").pop()?.content :
+                null
+          ) : null;
+
+          if (typeof lastUserText === "string") {
+            triggerHermesExtraction({
+              text: lastUserText,
+              sessionId,
+              settings: chatSettings,
+              handleSingleModelChat: (b, m, raw, req, k) => handleSingleModelChat(b, m, raw, req, k),
+              apiKey,
+              log,
+            });
+          }
+        }
+
+        return result.response;
+      }
+
+      // Antigravity 409/429: refresh live quota to get exact resetAt before locking
+      let quotaResetMs = null;
+      let resetsAtMs = result.resetsAtMs;
+      if (provider === "antigravity" && (result.status === 409 || result.status === 429)) {
+        quotaResetMs = await handleAntigravityQuotaError(
+          credentials.connectionId, result.status, model,
+          refreshedCredentials.accessToken, credentials.providerSpecificData
+        );
+        if (quotaResetMs) resetsAtMs = quotaResetMs;
+      }
+
+      // Exhausted Antigravity model is blocked only in RAM cache until upstream resetAt.
+      // Do not persist a modelLock_* for this path.
+      const shouldFallback = provider === "antigravity" && quotaResetMs
+        ? true
+        : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
+
+      if (shouldFallback) {
+        healthRecord(provider, { success: false, latencyMs: Date.now() - t0 });
+        try {
+          if (sessionId) incrementFailover(sessionId);
+          incrementFailover(credentials.connectionId);
+        } catch { /* fail-open */ }
+        log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
+        excludeConnectionIds.add(credentials.connectionId);
+        lastError = result.error;
+        lastStatus = result.status;
+        lastHeaders = upstreamResponseHeaders(result.response?.headers);
+        continue;
       }
 
       return result.response;
     }
-
-    // Antigravity 409/429: refresh live quota to get exact resetAt before locking
-    let quotaResetMs = null;
-    let resetsAtMs = result.resetsAtMs;
-    if (provider === "antigravity" && (result.status === 409 || result.status === 429)) {
-      quotaResetMs = await handleAntigravityQuotaError(
-        credentials.connectionId, result.status, model,
-        refreshedCredentials.accessToken, credentials.providerSpecificData
-      );
-      if (quotaResetMs) resetsAtMs = quotaResetMs;
-    }
-
-    // Exhausted Antigravity model is blocked only in RAM cache until upstream resetAt.
-    // Do not persist a modelLock_* for this path.
-    const shouldFallback = provider === "antigravity" && quotaResetMs
-      ? true
-      : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
-
-    if (shouldFallback) {
-      healthRecord(provider, { success: false, latencyMs: Date.now() - t0 });
-      try {
-        if (sessionId) incrementFailover(sessionId);
-        incrementFailover(credentials.connectionId);
-      } catch { /* fail-open */ }
-      log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
-      excludeConnectionIds.add(credentials.connectionId);
-      lastError = result.error;
-      lastStatus = result.status;
-      lastHeaders = upstreamResponseHeaders(result.response?.headers);
-      continue;
-    }
-
-    return result.response;
   }
-}

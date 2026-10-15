@@ -290,6 +290,14 @@ export async function saveRequestUsage(entry) {
     if (inserted) {
       pushToRing(entry);
       scheduleStatsEvent("update", 250);
+      // Per-key token quota accounting (single atomic UPDATE)
+      if (entry.apiKey && typeof entry.apiKey === "string") {
+        const totalTokens = promptTokens + completionTokens;
+        if (totalTokens > 0) {
+          const { incrementKeyTokens } = await import("./apiKeysRepo.js");
+          await incrementKeyTokens(entry.apiKey.trim(), totalTokens);
+        }
+      }
     }
   } catch (e) {
     console.error("Failed to save usage stats:", e);
