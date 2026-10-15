@@ -1,6 +1,6 @@
 {
   "name": "9router-app",
-  "version": "0.5.99-extended",
+  "version": "0.5.104-extended",
   "description": "9Router extendedweb dashboard",
   "private": true,
   "scripts": {
