@@ -6,34 +6,6 @@
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": true,
-  "routable": true,
-  "routing_threshold": 0.35,
-  "triggers": [
-    "ui design",
-    "frontend styling",
-    "css design",
-    "tailwind component",
-    "landing page layout",
-    "user interface",
-    "visual aesthetic",
-    "component design",
-    "button states",
-    "typography"
-  ],
-  "keywords": [
-    "ui",
-    "frontend",
-    "css",
-    "styling",
-    "tailwind",
-    "layout",
-    "aesthetic",
-    "component",
-    "design",
-    "typography",
-    "palette",
-    "states"
-  ],
   "source": "https://github.com/Leonxlnx/taste-skill",
   "config_schema": [
     {

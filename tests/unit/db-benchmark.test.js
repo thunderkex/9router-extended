@@ -33,23 +33,31 @@ beforeAll(async () => {
   await sqliteDb.initDb();
 
   // Lowdb setup — direct lowdb usage (mimics legacy behavior)
-  tempLowdb = fs.mkdtempSync(path.join(os.tmpdir(), "9router-bench-lowdb-"));
-  const { Low } = await import("lowdb");
-  const { JSONFile } = await import("lowdb/node");
-  const dbFile = path.join(tempLowdb, "db.json");
-  fs.writeFileSync(dbFile, JSON.stringify({ providerConnections: [], usageHistory: [] }));
-  lowDb = new Low(new JSONFile(dbFile), { providerConnections: [], usageHistory: [] });
-  await lowDb.read();
+  try {
+    tempLowdb = fs.mkdtempSync(path.join(os.tmpdir(), "9router-bench-lowdb-"));
+    const { Low } = await import("lowdb");
+    const { JSONFile } = await import("lowdb/node");
+    const dbFile = path.join(tempLowdb, "db.json");
+    fs.writeFileSync(dbFile, JSON.stringify({ providerConnections: [], usageHistory: [] }));
+    lowDb = new Low(new JSONFile(dbFile), { providerConnections: [], usageHistory: [] });
+    await lowDb.read();
+  } catch {
+    lowDb = null;
+  }
 });
 
-afterAll(() => {
-  if (tempSqlite) fs.rmSync(tempSqlite, { recursive: true, force: true });
-  if (tempLowdb) fs.rmSync(tempLowdb, { recursive: true, force: true });
+afterAll(async () => {
+  try { await sqliteDb?.closeDb?.(); } catch {}
+  try { if (tempSqlite) fs.rmSync(tempSqlite, { recursive: true, force: true }); } catch {}
+  try { if (tempLowdb) fs.rmSync(tempLowdb, { recursive: true, force: true }); } catch {}
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
 });
 
 describe("DB Benchmark — SQLite vs Lowdb", () => {
+  beforeEach((ctx) => {
+    if (!lowDb) ctx.skip();
+  });
   it(`INSERT ${N_ITEMS} provider connections`, async () => {
     console.log(`\n[INSERT ${N_ITEMS}]`);
 

@@ -34,25 +34,5 @@
       ],
       "default": "always"
     }
-  ],
-  "routable": true,
-  "routing_threshold": 0.35,
-  "triggers": [
-    "anti slop",
-    "human handwritten",
-    "clean code comments",
-    "no ai cliches",
-    "natural phrasing",
-    "remove filler phrases"
-  ],
-  "keywords": [
-    "slop",
-    "handwritten",
-    "phrasing",
-    "cliches",
-    "comments",
-    "natural",
-    "human",
-    "clean"
   ]
 }

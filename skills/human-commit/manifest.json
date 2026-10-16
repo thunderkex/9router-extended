@@ -6,26 +6,6 @@
   "category": "prompt-injection",
   "hook": "system-prompt",
   "default_enabled": false,
-  "routable": true,
-  "routing_threshold": 0.35,
-  "triggers": [
-    "commit message",
-    "format commit",
-    "git commit",
-    "pesan commit",
-    "buat commit"
-  ],
-  "keywords": [
-    "commit",
-    "git",
-    "pesan",
-    "format",
-    "feat",
-    "fix",
-    "docs",
-    "style",
-    "refactor"
-  ],
   "source": "local",
   "config_schema": [
     {

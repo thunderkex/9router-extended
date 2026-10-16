@@ -860,10 +860,6 @@ export class CursorExecutor extends BaseExecutor {
       } finally {
         try { session.end(); } catch { }
         try { session.close(); } catch { }
-        if (!finished) {
-          flushThinkingFallback(onEvent);
-          onEvent({ type: "done" });
-        }
       }
     };
 
