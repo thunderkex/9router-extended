@@ -368,6 +368,23 @@ export default function ProvidersPage() {
       : apikeyEntries.slice(0, APIKEY_INITIAL_VISIBLE);
   const hiddenApikeyCount = apikeyEntries.length - APIKEY_INITIAL_VISIBLE;
 
+  // Web Cookie: providers authenticated by a pasted browser/session cookie
+  // (connections are stored with authType "cookie" — see POST /api/providers).
+  const webCookieEntries = Object.entries(WEB_COOKIE_PROVIDERS)
+    .filter(
+      ([key, info]) =>
+        !info.hidden &&
+        (info.serviceKinds ?? ["llm"]).includes("llm") &&
+        matchSearch(info.name) &&
+        matchStatus(getProviderStats(key, "cookie"), info.noAuth),
+    )
+    .sort(([ka, a], [kb, b]) => {
+      const ca = getProviderStats(ka, "cookie").total > 0 ? 0 : 1;
+      const cb = getProviderStats(kb, "cookie").total > 0 ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
   if (loading) {
     return (
       <div className="flex flex-col gap-8">
@@ -382,6 +399,7 @@ export default function ProvidersPage() {
     freeEntries.length > 0 ||
     freeTierEntries.length > 0 ||
     apikeyEntries.length > 0 ||
+    webCookieEntries.length > 0 ||
     compatibleProviders.length > 0 ||
     anthropicCompatibleProviders.length > 0;
 
@@ -580,65 +598,33 @@ export default function ProvidersPage() {
       }
 
       {/* API Key Providers — fixed list */}
-      {
-        apikeyEntries.length > 0 && (
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 leading-tight">
-                API Key Providers{" "}
-              </h2>
-              <button
-                onClick={() => handleBatchTest("apikey")}
-                disabled={!!testingMode}
-                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${testingMode === "apikey"
-                  ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
-                  : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
-                  }`}
-                title="Test all API Key connections"
-                aria-label="Test all API Key connections"
-              >
-                <span
-                  className={`material-symbols-outlined text-[14px]${testingMode === "apikey" ? " animate-spin" : ""}`}
-                >
-                  play_arrow
-                </span>
-                {testingMode === "apikey" ? "Testing..." : "Test All"}
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-              {visibleApikeyEntries.map(([key, info]) => (
-                <ApiKeyProviderCard
-                  key={key}
-                  providerId={key}
-                  provider={info}
-                  stats={getProviderStats(key, "apikey")}
-                  authType="apikey"
-                  onToggle={(active) => handleToggleProvider(key, "apikey", active)}
-                />
-              ))}
-            </div>
-            {!isApikeySearching && !showAllApikey && hiddenApikeyCount > 0 && (
-              <button
-                onClick={() => setShowAllApikey(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:border-primary hover:bg-primary/5"
-              >
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
-                Show all {apikeyEntries.length} providers
-              </button>
-            )}
-          </div>
-        )
-      }
-
-      {/* Web Cookie Providers — use browser subscription cookie instead of API key */}
-      {/* <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            Web Cookie Providers{" "}
+      {apikeyEntries.length > 0 && (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 leading-tight">
+            API Key Providers{" "}
           </h2>
+          <button
+            onClick={() => handleBatchTest("apikey")}
+            disabled={!!testingMode}
+            className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
+              testingMode === "apikey"
+                ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
+                : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
+            }`}
+            title="Test all API Key connections"
+            aria-label="Test all API Key connections"
+          >
+            <span
+              className={`material-symbols-outlined text-[14px]${testingMode === "apikey" ? " animate-spin" : ""}`}
+            >
+              play_arrow
+            </span>
+            {testingMode === "apikey" ? "Testing..." : "Test All"}
+          </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Object.entries(WEB_COOKIE_PROVIDERS).map(([key, info]) => (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+          {visibleApikeyEntries.map(([key, info]) => (
             <ApiKeyProviderCard
               key={key}
               providerId={key}
@@ -648,8 +634,28 @@ export default function ProvidersPage() {
               onToggle={(active) => handleToggleProvider(key, "apikey", active)}
             />
           ))}
+          {webCookieEntries.map(([key, info]) => (
+            <ApiKeyProviderCard
+              key={key}
+              providerId={key}
+              provider={info}
+              stats={getProviderStats(key, "cookie")}
+              authType="cookie"
+              onToggle={(active) => handleToggleProvider(key, "cookie", active)}
+            />
+          ))}
         </div>
-      </div> */}
+        {!isApikeySearching && !showAllApikey && hiddenApikeyCount > 0 && (
+          <button
+            onClick={() => setShowAllApikey(true)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:border-primary hover:bg-primary/5"
+          >
+            <span className="material-symbols-outlined text-[16px]">expand_more</span>
+            Show all {apikeyEntries.length} providers
+          </button>
+        )}
+      </div>
+      )}
 
       <AddCompatibleModal
         variant="openai"

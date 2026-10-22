@@ -17,7 +17,7 @@ import * as log from "../utils/logger.js";
 import { saveRequestUsage } from "@/lib/usageDb.js";
 
 // Providers that don't require credentials (noAuth)
-const NO_AUTH_PROVIDERS = new Set(["sdwebui", "comfyui"]);
+const NO_AUTH_PROVIDERS = new Set(["sdwebui", "comfyui", "veoaifree-web"]);
 
 function recordImageRequestUsage({ provider, model, connectionId, apiKey, endpoint, usage }) {
   if (!usage || typeof usage !== "object") return;
@@ -159,6 +159,11 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
       },
       onRequestSuccess: async () => {
         await clearAccountError(credentials.connectionId, credentials, model);
+        // Cookies that rotate on use (Clerk `__client`) are mutated in place by
+        // the executor — persist the new value so the chain does not drift.
+        if (refreshedCredentials.apiKey && refreshedCredentials.apiKey !== credentials.apiKey) {
+          await updateProviderCredentials(credentials.connectionId, { apiKey: refreshedCredentials.apiKey });
+        }
       }
     });
 

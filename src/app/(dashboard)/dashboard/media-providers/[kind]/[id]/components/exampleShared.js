@@ -65,6 +65,11 @@ export const KIND_EXAMPLE_CONFIG = {
     defaultInput: "A serene lake at sunset",
     bodyKey: "prompt",
     defaultResponse: `{\n  "data": [\n    { "url": "..." }\n  ]\n}`,
+    extraFields: [
+      // Image-to-video (muse-web and other executor-driven providers):
+      // an image URL or an uploaded file (sent as a data: URL).
+      { key: "image", label: "Image (URL or upload)", type: "image", default: "" },
+    ],
   },
   music: {
     inputLabel: "Prompt",
