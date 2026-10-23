@@ -36,7 +36,8 @@ describe("bug: Claude → OpenAI bridge data loss", () => {
   });
 
   // claude-to-openai.js:155-173 — tool_result image block dropped (text only)
-  // FIXED in 5a315343
+  // KNOWN BUG
+  // Fixed in f4f06f29 ("keep tool-result images"): now a regression test.
   it("tool_result with image block is not turned into raw JSON / dropped", () => {
     const out = T(FORMATS.CLAUDE, FORMATS.OPENAI, {
       messages: [

@@ -136,11 +136,13 @@ export const MODEL_CAPABILITIES = {
   // With it left true, applyThinking emitted enable_thinking:false whenever a
   // turn asked for no reasoning, and z.ai answered 400 code 1210 "Invalid API
   // parameter" — intermittently, because only some turns ask. #4409
-  "glm-5.3-flash": { vision: true, videoInput: true, pdf: true, reasoning: true, thinkingFormat: "zai", thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
-  "glm-4.6v": { vision: true, videoInput: true, reasoning: true, thinkingFormat: "zai", contextWindow: 128000, maxOutput: 32768 },
-  "glm-4.5v": { vision: true, videoInput: true, reasoning: true, thinkingFormat: "zai", contextWindow: 64000, maxOutput: 16384 },
-  // GLM-5.2 has 1M context — pattern *glm-5* only gives 200k, so override here
-  "glm-5.2": { reasoning: true, thinkingFormat: "zai", thinkingEffortSupported: true, thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
+  "glm-5.3-flash":     { vision: true, videoInput: true, pdf: true, reasoning: true, thinkingFormat: "zai", thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
+  "glm-4.6v":          { vision: true, videoInput: true, reasoning: true, thinkingFormat: "zai", contextWindow: 128000, maxOutput: 32768 },
+  "glm-4.5v":          { vision: true, videoInput: true, reasoning: true, thinkingFormat: "zai", contextWindow: 64000, maxOutput: 16384 },
+  // GLM-5.2 has 1M context and maxOutput 131072. An exact entry shadows the *glm-5.2*
+  // pattern completely, so it must repeat that pattern's thinkingEffortSupported or
+  // reasoning_effort is dropped for GLM-5.2 (supported from 5.2 onward).
+  "glm-5.2":           { reasoning: true, thinkingFormat: "zai", thinkingEffortSupported: true, thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
 
   // DeepSeek's first V4 model with image input; text limits match V4-Flash.
   "deepseek-v4-flash-vision-exp": { vision: true, reasoning: true, thinkingFormat: "deepseek", contextWindow: 1000000, maxOutput: 384000 },
@@ -243,22 +245,24 @@ export const PROVIDER_CAPABILITIES = {
     "claude-haiku-5-5": { vision: true, reasoning: true, search: true, thinkingFormat: "commandcode", thinkingEffortSupported: true, contextWindow: 1000000, maxOutput: 128000 },
   },
   "codex": {
-    "gpt-6.1-sol": { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
-    "gpt-6-astra": { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
-    "gpt-6-sol": { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
-    "gpt-6-luna": { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
-    "gpt-6-astra[1m]": CODEX_EXTENDED_CAPS,
-    "gpt-6-sol[1m]": CODEX_EXTENDED_CAPS,
-    "gpt-6-luna[1m]": CODEX_EXTENDED_CAPS,
-    "gpt-5.6-sol[1m]": CODEX_EXTENDED_CAPS,
-    "gpt-5.6-terra[1m]": CODEX_EXTENDED_CAPS,
-    "gpt-5.6-luna[1m]": CODEX_EXTENDED_CAPS,
-    "gpt-5.6-sol": CODEX_GPT_56_SOL_CAPS,
-    "gpt-5.6-sol-review": CODEX_GPT_56_SOL_CAPS,
-    "gpt-5.6-terra": CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-5.6-terra-review": CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-5.6-luna": CODEX_GPT_56_DEFAULT_CAPS,
-    "gpt-5.6-luna-review": CODEX_GPT_56_DEFAULT_CAPS,
+    "gpt-6-astra":               { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
+    "gpt-6-sol":                 { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
+    // Without its own entry gpt-6.1-sol fell through to *gpt-6* (1.05M), overstating
+    // the Codex window like any unlisted sibling would.
+    "gpt-6.1-sol":               { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
+    "gpt-6-luna":                { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 272000, maxOutput: 128000 },
+    "gpt-6-astra[1m]":           CODEX_EXTENDED_CAPS,
+    "gpt-6-sol[1m]":             CODEX_EXTENDED_CAPS,
+    "gpt-6-luna[1m]":            CODEX_EXTENDED_CAPS,
+    "gpt-5.6-sol[1m]":           CODEX_EXTENDED_CAPS,
+    "gpt-5.6-terra[1m]":         CODEX_EXTENDED_CAPS,
+    "gpt-5.6-luna[1m]":          CODEX_EXTENDED_CAPS,
+    "gpt-5.6-sol":               CODEX_GPT_56_SOL_CAPS,
+    "gpt-5.6-sol-review":        CODEX_GPT_56_SOL_CAPS,
+    "gpt-5.6-terra":             CODEX_GPT_56_DEFAULT_CAPS,
+    "gpt-5.6-terra-review":      CODEX_GPT_56_DEFAULT_CAPS,
+    "gpt-5.6-luna":              CODEX_GPT_56_DEFAULT_CAPS,
+    "gpt-5.6-luna-review":       CODEX_GPT_56_DEFAULT_CAPS,
   },
   "kiro": {
     "gpt-5.6-sol": KIRO_GPT_5_6_CAPABILITIES,

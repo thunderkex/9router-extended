@@ -22,6 +22,8 @@ beforeAll(async () => {
   vi.resetModules();
   db = await import("@/lib/db/index.js");
   await db.initDb();
+  // 3fab15ae moved the switch back to enableObservability (default false); the old
+  // enableObservability2 key is ignored, which left request details disabled here.
   await db.updateSettings({ enableObservability: true, observabilityBatchSize: 1 });
 
   const { getAdapter } = await import("@/lib/db/driver.js");
