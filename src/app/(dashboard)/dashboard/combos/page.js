@@ -5,10 +5,11 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
-import { Card, Button, Modal, Input, CardSkeleton, ModelSelectModal, ConfirmModal, CapacityBadges, Select, Toggle } from "@/shared/components";
+import { Card, Button, Modal, Input, CardSkeleton, ModelSelectModal, ConfirmModal, CapacityBadges, Select, Toggle, Badge, SmartPolicyModal } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
+import { resolveProviderId, AI_PROVIDERS } from "@/shared/constants/providers";
 
 // Validate combo name: only a-z, A-Z, 0-9, -, _
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
@@ -49,8 +50,21 @@ function normalizeCapEntry(entry) {
 const STRATEGY_OPTIONS = [
   { value: "fallback", label: "Fallback — try in order" },
   { value: "round-robin", label: "Round Robin — rotate" },
+  { value: "smart", label: "Smart Router — System One" },
   { value: "fusion", label: "Fusion — panel + judge" },
 ];
+
+function getPolicyBadgeLabel(strategy = {}) {
+  const policy = strategy.smartPolicy || (strategy.sessionSticky === false ? "per-turn" : "smart");
+  if (policy === "strict") return "Strict Lock";
+  if (policy === "per-turn") return "Per-Turn";
+  if (policy === "custom") {
+    const raw = strategy.confidenceThreshold;
+    const pct = Math.round((raw || 0.8) * (raw && raw <= 1 ? 100 : 1));
+    return `Custom (≥${pct || 80}%)`;
+  }
+  return "Smart (≥80%)";
+}
 
 export default function CombosPage() {
   const [combos, setCombos] = useState([]);
@@ -437,6 +451,7 @@ export default function CombosPage() {
           <ul className="text-sm text-text-muted mt-2 flex flex-col gap-1">
             <li><span className="font-medium text-text-main">Fallback</span> — tries models in order (next on failure)</li>
             <li><span className="font-medium text-text-main">Round Robin</span> — rotates models across requests to spread load</li>
+            <li><span className="font-medium text-text-main">Smart Router</span> — queries a System One decision model to pick the optimal model before generation; supports Smart Switch (adaptive hysteresis), Strict Lock (1 task = 1 session, +0ms latency), and Per-Turn modes to maximize prompt-cache retention</li>
             <li><span className="font-medium text-text-main">Fusion</span> — queries all models in parallel, then a judge synthesizes one answer. Best quality, but costs the most: every request bills all panel models + the judge (N+1 calls)</li>
           </ul>
           <p className="hidden text-xs text-text-muted mt-3 max-w-2xl">
@@ -927,11 +942,37 @@ const fmtK = (n) => {
   return `${Math.round(n / 1000)}k`;
 };
 
+function getRouterModelStatus(routerModel, activeProviders) {
+  const effectiveModel = (typeof routerModel === "string" && routerModel.trim())
+    ? routerModel.trim()
+    : "oc/jev-1.13-free";
+  const slashIdx = effectiveModel.indexOf("/");
+  const prefix = slashIdx !== -1 ? effectiveModel.slice(0, slashIdx) : effectiveModel;
+  const providerId = resolveProviderId(prefix);
+  const providerDef = AI_PROVIDERS[providerId];
+  const isNoAuth = !!providerDef?.noAuth;
+
+  if (isNoAuth) {
+    return { ready: true, label: "Ready (Free)", providerId };
+  }
+
+  const isConnected = (activeProviders || []).some((c) => c.provider === providerId && c.isActive !== false);
+  if (isConnected) {
+    return { ready: true, label: "Connected", providerId };
+  }
+
+  return { ready: false, label: "Not configured", providerId };
+}
+
 function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], copied, onCopy, onEdit, onDelete, strategy = {}, onSetStrategy, selected = false, onToggleSelect }) {
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
+  const [showRouterSelect, setShowRouterSelect] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
   const current = strategy.fallbackStrategy || "fallback";
   const judge = strategy.judgeModel || "";
+  const routerModel = strategy.routerModel || "";
   const isFusion = current === "fusion";
+  const isSmart = current === "smart";
   // The synced catalog is server-only, so resolving here would fall back to the
   // generic patterns and under-report the limits. getCaps carries the server's
   // answer for /api/models.
@@ -1005,6 +1046,55 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                 )}
               </div>
             )}
+            {/* Smart: System One router picker and policy modal trigger */}
+            {isSmart && (() => {
+              const routerStatus = getRouterModelStatus(routerModel, activeProviders);
+              const policyLabel = getPolicyBadgeLabel(strategy);
+              return (
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-text-muted">Router</span>
+                  <button
+                    onClick={() => setShowRouterSelect(true)}
+                    className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-primary/40 px-1.5 py-0.5 font-mono text-[11px] text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+                    title="Pick the System One model that decides model routing"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">psychology</span>
+                    <span className="truncate">{routerModel || "Auto — oc/jev-1.13-free"}</span>
+                  </button>
+                  {routerStatus.ready ? (
+                    <Badge variant="success" size="sm" dot>{routerStatus.label}</Badge>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <Badge variant="error" size="sm" dot>{routerStatus.label}</Badge>
+                      <Link
+                        href={`/dashboard/media-providers/systemone/${routerStatus.providerId}`}
+                        className="text-[10px] text-primary hover:underline font-medium"
+                        title="Configure in Media Providers"
+                      >
+                        Configure
+                      </Link>
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setShowPolicyModal(true)}
+                    className="inline-flex items-center gap-1 rounded border border-border/70 bg-black/[0.02] dark:bg-white/[0.02] px-2 py-0.5 text-[11px] text-text-main hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                    title="Configure routing policy and prompt cache retention"
+                  >
+                    <span className="material-symbols-outlined text-[13px] text-text-muted">tune</span>
+                    <span className="font-medium">{policyLabel}</span>
+                  </button>
+                  {routerModel && (
+                    <button
+                      onClick={() => onSetStrategy({ routerModel: "" })}
+                      className="p-0.5 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                      title="Reset router to Auto"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">close</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -1061,6 +1151,32 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
           title="Select Judge Model"
           addedModelValues={judge ? [judge] : []}
           closeOnSelect={true}
+        />
+      )}
+
+      {/* System One Router model picker (single-select from systemone kind) */}
+      {showRouterSelect && (
+        <ModelSelectModal
+          isOpen={showRouterSelect}
+          onClose={() => setShowRouterSelect(false)}
+          onSelect={(m) => { onSetStrategy({ routerModel: m?.value || "" }); setShowRouterSelect(false); }}
+          activeProviders={activeProviders}
+          title="Select System One Router Model"
+          kindFilter="systemone"
+          addedModelValues={routerModel ? [routerModel] : []}
+          closeOnSelect={true}
+        />
+      )}
+
+      {/* Smart Router Policy Settings Modal */}
+      {showPolicyModal && (
+        <SmartPolicyModal
+          isOpen={showPolicyModal}
+          onClose={() => setShowPolicyModal(false)}
+          comboName={combo.name}
+          currentPolicy={strategy.smartPolicy || (strategy.sessionSticky === false ? "per-turn" : "smart")}
+          currentThreshold={strategy.confidenceThreshold ?? 80}
+          onSave={onSetStrategy}
         />
       )}
     </Card>
