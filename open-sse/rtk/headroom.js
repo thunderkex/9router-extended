@@ -1,7 +1,8 @@
 import { claudeToOpenAIRequest } from "../translator/request/claude-to-openai.js";
 import { openaiToClaudeRequest } from "../translator/request/openai-to-claude.js";
 import { FORMATS } from "../translator/formats.js";
-import { ROLE, OPENAI_BLOCK, COMMANDCODE_BLOCK } from "../translator/schema/index.js";
+import { ROLE, OPENAI_BLOCK, COMMANDCODE_BLOCK, RESPONSES_ITEM } from "../translator/schema/index.js";
+import { HEADROOM_TOOL_OUTPUT_MAX_DEPTH } from "./constants.js";
 import {
   openaiResponsesToOpenAIRequest,
   openaiToOpenAIResponsesRequest,
@@ -27,6 +28,8 @@ function messagePayload(body) {
   if (Array.isArray(body?.messages)) return body.messages;
   if (Array.isArray(body?.input)) return body.input;
   if (Array.isArray(body?.params?.messages)) return body.params.messages;
+  if (Array.isArray(body?.request?.contents)) return body.request.contents;
+  if (Array.isArray(body?.contents)) return body.contents;
   const kiro = collectKiroHeadroomMessages(body);
   if (kiro) return kiro.messages;
   return null;
@@ -38,13 +41,15 @@ function captureSizeSnapshot(body) {
     message?.role === "tool"
     || message?.role === "function"
     || message?.tool_calls?.length
+    || message?.type === RESPONSES_ITEM.FUNCTION_CALL_OUTPUT
+    || message?.parts?.some?.((part) => part?.functionResponse || part?.functionCall)
     || message?.content?.some?.((part) => part?.type === "tool_use" || part?.type === "tool_result"
       || part?.type === COMMANDCODE_BLOCK.TOOL_CALL || part?.type === COMMANDCODE_BLOCK.TOOL_RESULT)
   ) || [];
   return {
     bodyBytes: jsonBytes(body),
     messageBytes: messages ? jsonBytes(messages) : 0,
-    toolSchemaBytes: jsonBytes(body?.tools || body?.params?.tools || []),
+    toolSchemaBytes: jsonBytes(body?.tools || body?.params?.tools || body?.request?.tools || []),
     toolHistoryBytes: jsonBytes(toolHistory),
   };
 }
@@ -99,6 +104,69 @@ function hasUnsafeResponsesInputForCompression(body) {
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
     return typeof item.type === "string" && item.type !== "message";
   });
+}
+
+// Project only plain tool-output leaves. Keep protocol items and structured
+// payloads in their native format instead of round-tripping the conversation.
+function collectToolOutputText(body, format) {
+  const messages = [];
+  const targets = [];
+  const visit = (object, key, depth = 0) => {
+    if (depth > HEADROOM_TOOL_OUTPUT_MAX_DEPTH) return;
+    const value = object?.[key];
+    if (typeof value === "string") {
+      if (!value.trim()) return;
+      try { JSON.parse(value); return; } catch { /* plain text */ }
+      messages.push({ role: ROLE.TOOL, tool_call_id: `headroom-tool-${messages.length}`, content: value });
+      targets.push({ object, key, text: value });
+    } else if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) visit(value, i, depth + 1);
+    } else if (value && typeof value === "object") {
+      if (value.type && value.type !== OPENAI_BLOCK.TEXT && value.type !== RESPONSES_ITEM.INPUT_TEXT) return;
+      for (const field of ["result", "output", "content", "text"]) {
+        if (Object.hasOwn(value, field)) visit(value, field, depth + 1);
+      }
+    }
+  };
+
+  if (format === FORMATS.OPENAI_RESPONSES && hasUnsafeResponsesInputForCompression(body)) {
+    for (const item of body.input) {
+      if (item?.type === RESPONSES_ITEM.FUNCTION_CALL_OUTPUT) visit(item, "output");
+    }
+  } else if ([FORMATS.GEMINI, FORMATS.GEMINI_CLI, FORMATS.ANTIGRAVITY, FORMATS.VERTEX].includes(format)) {
+    const contents = body.request?.contents || body.contents;
+    if (!Array.isArray(contents)) return null;
+    for (const content of contents) {
+      if (!Array.isArray(content?.parts)) continue;
+      for (const part of content.parts) {
+        if (part?.functionResponse) visit(part.functionResponse, "response");
+      }
+    }
+  } else {
+    return null;
+  }
+  return { messages, targets };
+}
+
+function applyToolOutputText(projection, messages, diagnostics) {
+  if (!Array.isArray(messages) || messages.length !== projection.messages.length) {
+    setDiagnostic(diagnostics, "proxy response did not match tool-output count");
+    return false;
+  }
+  const updates = [];
+  for (let i = 0; i < messages.length; i++) {
+    const actual = messages[i];
+    if (actual?.role !== ROLE.TOOL || actual.tool_call_id !== projection.messages[i].tool_call_id
+      || typeof actual.content !== "string") {
+      setDiagnostic(diagnostics, "proxy response did not preserve tool-output IDs, order, roles or text");
+      return false;
+    }
+    if (actual.content.trim() && actual.content.length < projection.targets[i].text.length) {
+      updates.push({ ...projection.targets[i], text: actual.content });
+    }
+  }
+  for (const { object, key, text } of updates) object[key] = text;
+  return true;
 }
 
 function collectKiroHeadroomMessages(body) {
@@ -305,6 +373,18 @@ export async function compressWithHeadroom(body, { enabled, url, model, format, 
 
   try {
     if (diagnostics) diagnostics.before = captureSizeSnapshot(body);
+
+    const toolOutputs = collectToolOutputText(body, format);
+    if (toolOutputs) {
+      if (!toolOutputs.messages.length) {
+        setDiagnostic(diagnostics, "no eligible plain-text tool output");
+        return null;
+      }
+      const data = await callCompress(url, toolOutputs.messages, model, timeoutMs, compressUserMessages, diagnostics || {});
+      if (!data || !applyToolOutputText(toolOutputs, data.messages, diagnostics)) return null;
+      if (diagnostics) diagnostics.after = captureSizeSnapshot(body);
+      return data;
+    }
 
     // Claude shape: translate → OpenAI → compress → translate back.
     if (format === "claude") {

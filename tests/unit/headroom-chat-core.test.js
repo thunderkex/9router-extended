@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import "../translator/registerAll.js";
 
 const { executeMock } = vi.hoisted(() => ({
   executeMock: vi.fn(),
@@ -208,6 +209,47 @@ describe("handleChatCore Headroom diagnostics", () => {
     const logs = JSON.stringify([...log.info.mock.calls, ...log.warn.mock.calls]);
     expect(logs).not.toContain("saved");
     expect(logs).not.toContain(original);
+  });
+
+  it("sends compressed Responses tool output through the Antigravity translator to its executor", async () => {
+    const original = "search output ".repeat(1000);
+    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    global.fetch = vi.fn(async (_url, init) => {
+      const payload = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        messages: payload.messages.map((message) => ({ ...message, content: "short result" })),
+        tokens_before: 1000, tokens_after: 10, tokens_saved: 990,
+      }));
+    });
+
+    await handleChatCore({
+      body: {
+        model: "gemini-2.5-flash", stream: true,
+        input: [
+          { type: "function_call", call_id: "call_1", name: "search", arguments: '{"query":"symbol"}' },
+          { type: "function_call_output", call_id: "call_1", output: original },
+          { role: "user", content: "continue" },
+        ],
+        tools: [{ type: "function", name: "search", parameters: { type: "object" } }],
+      },
+      modelInfo: { provider: "antigravity", model: "gemini-2.5-flash" },
+      credentials: { accessToken: "test-token", projectId: "test-project" },
+      sourceFormatOverride: "openai-responses",
+      log, connectionId: "test-conn", headroomEnabled: true, headroomUrl: "http://localhost:8787",
+      rtkEnabled: false, cavemanEnabled: false, ponytailEnabled: false,
+      clientRawRequest: { endpoint: "/v1/responses", body: {}, headers: {} },
+    });
+
+    expect(global.fetch).toHaveBeenCalledOnce();
+    expect(executeMock).toHaveBeenCalledOnce();
+    const outbound = executeMock.mock.calls[0][0].body;
+    const parts = outbound.request.contents.flatMap((content) => content.parts);
+    expect(parts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ functionResponse: expect.objectContaining({ id: "call_1", response: { result: { result: "short result" } } }) }),
+      expect.objectContaining({ functionCall: expect.objectContaining({ name: "search", args: { query: "symbol" } }) }),
+    ]));
+    expect(JSON.stringify(outbound)).not.toContain(original);
+    expect(log.info).toHaveBeenCalledWith("HEADROOM", expect.stringContaining("reported token delta=990"));
   });
 
   it("does not warn about healthy message compression when tools dominate the body", async () => {
