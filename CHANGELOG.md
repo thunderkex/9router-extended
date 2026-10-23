@@ -2,6 +2,7 @@
 
 ## Fixes
 - **OpenCode Free**: fully support reasoning on `oc/mimo-v2.6-flash-free` — the lane takes the plain OpenAI `reasoning_effort` enum, so `none` now disables thinking instead of being clamped to `low`, `minimal`/`max` are selectable instead of collapsing to `low`/`high`, and adaptive (`auto`) effort is dropped rather than sent (upstream answers `400 Invalid option`); its MiMo route streams thinking as `reasoning`/`reasoning_details`, which the OpenAI passthrough now also exposes as `reasoning_content`, and the vendor-alias shapes are read by the SSE→JSON aggregation and the Antigravity/Claude/Responses translators alike
+- **DB**: strip NUL bytes from bound strings so a value carrying raw binary no longer aborts the write on better-sqlite3 ("String contains null byte") or gets silently truncated at the first NUL on node:sqlite (#4917)
 
 # v0.5.104 (2026-10-15)
 
