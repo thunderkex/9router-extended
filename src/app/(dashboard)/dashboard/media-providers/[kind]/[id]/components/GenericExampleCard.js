@@ -489,6 +489,16 @@ export function GenericExampleCard({ providerId, kind }) {
                   />
                 </label>
               </div>
+            ) : f.type === "boolean" ? (
+              <label className="inline-flex items-center gap-2 text-sm text-text-main">
+                <input
+                  type="checkbox"
+                  checked={extraValues[f.key] === true}
+                  onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.checked }))}
+                  className="size-4 accent-primary"
+                />
+                {extraValues[f.key] ? "Enabled" : "Disabled"}
+              </label>
             ) : (
               <input
                 type="number"
