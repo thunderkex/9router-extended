@@ -25,6 +25,7 @@ vi.mock("../../open-sse/utils/requestLogger.js", () => ({
 vi.mock("../../open-sse/utils/stream.js", () => ({
   COLORS: { red: "", reset: "" },
   createPassthroughStreamWithLogger: vi.fn(() => new TransformStream()),
+  createSSETransformStreamWithLogger: vi.fn(() => new TransformStream()),
 }));
 
 vi.mock("@/lib/usageDb.js", () => ({
@@ -158,7 +159,7 @@ describe("handleChatCore Headroom diagnostics", () => {
     expect(logs).not.toContain("abc123");
   });
 
-  it("sends Headroom-compressed messages to the provider executor", async () => {
+  it.each([["openai", "gpt-4o"], ["commandcode", "test-model"]])("sends Headroom-compressed messages to the %s executor", async (provider, model) => {
     const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() };
     const original = "very large context that should be replaced";
     const compressed = "compressed context";
@@ -176,8 +177,8 @@ describe("handleChatCore Headroom diagnostics", () => {
     });
 
     await handleChatCore({
-      body: { model: "gpt-4o", stream: false, messages: [{ role: "user", content: original }] },
-      modelInfo: { provider: "openai", model: "gpt-4o" },
+      body: { model, stream: false, messages: [{ role: "user", content: original }] },
+      modelInfo: { provider, model },
       credentials: { apiKey: "test-key", providerSpecificData: {} },
       log,
       connectionId: "test-conn",
@@ -195,9 +196,9 @@ describe("handleChatCore Headroom diagnostics", () => {
     });
 
     expect(executeMock).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.objectContaining({
-        messages: [{ role: "user", content: compressed }],
-      }),
+      body: expect.objectContaining(provider === "commandcode"
+        ? { params: expect.objectContaining({ messages: [{ role: "user", content: [{ type: "text", text: compressed }] }] }) }
+        : { messages: [{ role: "user", content: compressed }] }),
     }));
     expect(JSON.stringify(executeMock.mock.calls[0][0].body)).not.toContain(original);
     expect(log.info).toHaveBeenCalledWith("HEADROOM", expect.stringContaining("reported token delta=90 before=100 after=10"));

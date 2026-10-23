@@ -1,5 +1,7 @@
 import { claudeToOpenAIRequest } from "../translator/request/claude-to-openai.js";
 import { openaiToClaudeRequest } from "../translator/request/openai-to-claude.js";
+import { FORMATS } from "../translator/formats.js";
+import { ROLE, OPENAI_BLOCK, COMMANDCODE_BLOCK } from "../translator/schema/index.js";
 import {
   openaiResponsesToOpenAIRequest,
   openaiToOpenAIResponsesRequest,
@@ -24,6 +26,7 @@ function jsonBytes(value) {
 function messagePayload(body) {
   if (Array.isArray(body?.messages)) return body.messages;
   if (Array.isArray(body?.input)) return body.input;
+  if (Array.isArray(body?.params?.messages)) return body.params.messages;
   const kiro = collectKiroHeadroomMessages(body);
   if (kiro) return kiro.messages;
   return null;
@@ -35,12 +38,13 @@ function captureSizeSnapshot(body) {
     message?.role === "tool"
     || message?.role === "function"
     || message?.tool_calls?.length
-    || message?.content?.some?.((part) => part?.type === "tool_use" || part?.type === "tool_result")
+    || message?.content?.some?.((part) => part?.type === "tool_use" || part?.type === "tool_result"
+      || part?.type === COMMANDCODE_BLOCK.TOOL_CALL || part?.type === COMMANDCODE_BLOCK.TOOL_RESULT)
   ) || [];
   return {
     bodyBytes: jsonBytes(body),
     messageBytes: messages ? jsonBytes(messages) : 0,
-    toolSchemaBytes: jsonBytes(body?.tools || []),
+    toolSchemaBytes: jsonBytes(body?.tools || body?.params?.tools || []),
     toolHistoryBytes: jsonBytes(toolHistory),
   };
 }
@@ -167,6 +171,45 @@ function collectKiroHeadroomMessages(body) {
   return messages.length > 0 ? { messages, targets } : null;
 }
 
+function collectCommandCodeHeadroomMessages(body) {
+  const params = body?.params;
+  if (!Array.isArray(params?.messages)) return null;
+  const messages = [];
+  const targets = [];
+  const addText = (role, object, key, extra = {}) => {
+    if (typeof object?.[key] !== "string") return;
+    messages.push({ role, content: object[key], ...extra });
+    targets.push({ object, key });
+  };
+
+  addText(ROLE.SYSTEM, params, "system");
+  for (const message of params.messages) {
+    if (!Array.isArray(message?.content)) continue;
+    const toolCalls = message.content.filter((part) => part?.type === COMMANDCODE_BLOCK.TOOL_CALL);
+    if (message.role === ROLE.ASSISTANT && toolCalls.length) {
+      messages.push({
+        role: ROLE.ASSISTANT,
+        content: "",
+        tool_calls: toolCalls.map((part) => ({
+          id: part.toolCallId,
+          type: OPENAI_BLOCK.FUNCTION,
+          function: { name: part.toolName, arguments: JSON.stringify(part.input ?? {}) },
+        })),
+      });
+      // Tool metadata is context for the proxy; only native text fields are updated.
+      targets.push(null);
+    }
+    for (const part of message.content) {
+      if (part?.type === OPENAI_BLOCK.TEXT) {
+        addText(message.role, part, "text");
+      } else if (part?.type === COMMANDCODE_BLOCK.TOOL_RESULT && part.output?.type === OPENAI_BLOCK.TEXT) {
+        addText(ROLE.TOOL, part.output, "value", { tool_call_id: part.toolCallId, name: part.toolName });
+      }
+    }
+  }
+  return messages.length > 0 ? { messages, targets } : null;
+}
+
 function textFromHeadroomMessage(message) {
   const content = message?.content;
   if (typeof content === "string") return content;
@@ -183,9 +226,9 @@ function textFromHeadroomMessage(message) {
   return parts.length > 0 ? parts.join("\n") : null;
 }
 
-function applyKiroHeadroomMessages(projection, compressedMessages, diagnostics) {
+function applyProjectedHeadroomMessages(projection, compressedMessages, diagnostics, label) {
   if (!Array.isArray(compressedMessages) || compressedMessages.length !== projection.messages.length) {
-    setDiagnostic(diagnostics, "proxy response did not match Kiro message count");
+    setDiagnostic(diagnostics, `proxy response did not match ${label} message count`);
     return false;
   }
 
@@ -193,17 +236,17 @@ function applyKiroHeadroomMessages(projection, compressedMessages, diagnostics) 
   for (let i = 0; i < projection.messages.length; i++) {
     const expected = projection.messages[i];
     const actual = compressedMessages[i];
-    if (!actual || actual.role !== expected.role) {
-      setDiagnostic(diagnostics, "proxy response did not preserve Kiro message order");
+    if (!actual || actual.role !== expected.role || actual.tool_call_id !== expected.tool_call_id) {
+      setDiagnostic(diagnostics, `proxy response did not preserve ${label} message order`);
       return false;
     }
 
     const text = textFromHeadroomMessage(actual);
     if (text === null) {
-      setDiagnostic(diagnostics, "proxy response missing Kiro text content");
+      setDiagnostic(diagnostics, `proxy response missing ${label} text content`);
       return false;
     }
-    updates.push({ target: projection.targets[i], text });
+    if (projection.targets[i]) updates.push({ target: projection.targets[i], text });
   }
 
   for (const update of updates) {
@@ -317,7 +360,22 @@ export async function compressWithHeadroom(body, { enabled, url, model, format, 
       }
       const data = await callCompress(url, projection.messages, model, timeoutMs, compressUserMessages, diagnostics || {});
       if (!data) return null;
-      if (!applyKiroHeadroomMessages(projection, data.messages, diagnostics)) return null;
+      if (!applyProjectedHeadroomMessages(projection, data.messages, diagnostics, "Kiro")) return null;
+      if (diagnostics) diagnostics.after = captureSizeSnapshot(body);
+      return data;
+    }
+
+    // CommandCode keeps native blocks under params. Project text for Headroom,
+    // then update only those fields so tool calls, reasoning and images survive.
+    if (format === FORMATS.COMMANDCODE) {
+      const projection = collectCommandCodeHeadroomMessages(body);
+      if (!projection) {
+        setDiagnostic(diagnostics, "CommandCode request did not project to messages[]");
+        return null;
+      }
+      const data = await callCompress(url, projection.messages, model, timeoutMs, compressUserMessages, diagnostics || {});
+      if (!data) return null;
+      if (!applyProjectedHeadroomMessages(projection, data.messages, diagnostics, "CommandCode")) return null;
       if (diagnostics) diagnostics.after = captureSizeSnapshot(body);
       return data;
     }
