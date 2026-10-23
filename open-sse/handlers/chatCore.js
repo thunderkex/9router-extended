@@ -24,6 +24,7 @@ import { dedupeTools } from "../utils/toolDeduper.js";
 import { takeRenamedToolNames } from "../utils/opencodeFingerprint.js";
 import { injectCaveman } from "../rtk/caveman.js";
 import { injectPonytail } from "../rtk/ponytail.js";
+import { injectCustomPrompt } from "../rtk/customPrompt.js";
 import { compressMessages, formatRtkLog } from "../rtk/index.js";
 import { compressWithHeadroom, formatHeadroomLog, formatHeadroomSizeLog, isHeadroomPhantomSavings } from "../rtk/headroom.js";
 import { compressWithPxpipe } from "../rtk/pxpipe.js";
@@ -62,7 +63,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, activeGenericPrompts, eccSkills, autoPlan, trimEnabled, trimBudget, providerOverrides = null }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, customPromptEnabled, customPrompt, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, activeGenericPrompts, eccSkills, autoPlan, trimEnabled, trimBudget, providerOverrides = null }) { 
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -441,6 +442,8 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       injectGenericPrompt(translatedBody, finalFormat, skill.prompt);
       xf.push(`${skill.id.toUpperCase()}:ON`);
     }
+  if (customPromptEnabled && injectCustomPrompt(translatedBody, finalFormat, customPrompt)) {
+    xf.push(`CUSTOMPROMPT:${customPrompt.trim().length}c`);
   }
 
   // PXPIPE: image bulky context (Claude-format bodies only), last saver before dispatch
