@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyEnvFingerprint,
   applyFingerprintTools,
   concealFingerprintToolNames,
   appendMissingFingerprintTools,
@@ -53,7 +54,10 @@ describe("opencodeFingerprint — request side", () => {
     const map = applyFingerprintTools(body, true);
     expect(namesOf(body.tools)).toEqual(OPENCODE_FINGERPRINT_TOOLS);
     expect(map.size).toBe(0);
-    expect(body.instructions).toBeUndefined();
+    // No placeholder note when the caller already declared the exact definitions;
+    // the environment marker is still appended on every free-lane request.
+    expect(body.instructions).not.toContain("placeholder");
+    expect(body.instructions).toContain("<env>");
   });
 
   it("drops duplicate declarations of one fingerprint name", () => {
@@ -183,6 +187,54 @@ describe("opencodeFingerprint — response side", () => {
   it("leaves unknown tool names untouched", () => {
     const body = { output: [{ type: "function_call", name: "Edit" }] };
     expect(restoreToolNames(body, map).output[0].name).toBe("Edit");
+  });
+});
+
+// The upstream free tier answers 429 FreeUsageLimitError unless the system
+// prompt carries the CLI's `<env>` block AND the body declares tools. Both
+// halves are required; either one alone is refused (live probes 2026-10-26).
+describe("applyEnvFingerprint", () => {
+  it("appends the marker to a chat system message without replacing it", () => {
+    const body = { messages: [{ role: "system", content: "You are helpful." }, { role: "user", content: "hi" }] };
+    expect(applyEnvFingerprint(body, false)).toBe(true);
+    expect(body.messages[0].content).toContain("You are helpful.");
+    expect(body.messages[0].content).toContain("<env>");
+    expect(body.messages[0].content).toContain("Working directory:");
+  });
+
+  it("creates the system message when the body has none", () => {
+    const body = { messages: [{ role: "user", content: "hi" }] };
+    expect(applyEnvFingerprint(body, false)).toBe(true);
+    expect(body.messages[0].role).toBe("system");
+    expect(body.messages[0].content).toContain("<env>");
+  });
+
+  it("is idempotent when the marker is already present", () => {
+    const body = { messages: [{ role: "system", content: "x\n\n<env>\n</env>" }, { role: "user", content: "hi" }] };
+    expect(applyEnvFingerprint(body, false)).toBe(false);
+    expect(body.messages[0].content).toBe("x\n\n<env>\n</env>");
+  });
+
+  it("appends to Responses instructions", () => {
+    const body = { instructions: "Be terse." };
+    expect(applyEnvFingerprint(body, true)).toBe(true);
+    expect(body.instructions).toContain("Be terse.");
+    expect(body.instructions).toContain("<env>");
+  });
+
+  it("appends to a claude top-level system field instead of adding role:system", () => {
+    const body = { system: "Be terse.", messages: [{ role: "user", content: "hi" }] };
+    expect(applyEnvFingerprint(body, false, { claude: true })).toBe(true);
+    expect(body.system).toContain("Be terse.");
+    expect(body.system).toContain("<env>");
+    expect(body.messages).toHaveLength(1);
+  });
+
+  it("handles claude system held as text blocks", () => {
+    const body = { system: [{ type: "text", text: "Be terse." }], messages: [] };
+    expect(applyEnvFingerprint(body, false, { claude: true })).toBe(true);
+    expect(body.system[0].text).toContain("Be terse.");
+    expect(body.system[0].text).toContain("<env>");
   });
 });
 
