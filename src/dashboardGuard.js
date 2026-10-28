@@ -78,6 +78,8 @@ const LOCAL_ONLY_PATHS = [
   "/api/skills/install",
   "/api/cli-tools/cowork-settings",
   "/api/cli-tools/antigravity-mitm",
+  "/api/oauth/minimax-code/lease",
+  "/api/oauth/minimax-code-global/lease",
 ];
 
 // Mixed read/write routes: GET is a status read safe behind regular auth, but POST/DELETE
