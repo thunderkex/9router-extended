@@ -1,3 +1,7 @@
+# Unreleased
+
+## Fixes
+- **NVIDIA NIM**: normalize assistant `reasoning` aliases to `reasoning_content` before forwarding, avoiding NIM's duplicate-field 400 when clients send both.
 # v0.5.111 (2026-10-26)
 
 ## Features
