@@ -1,14 +1,8 @@
 import { OPENAI_BLOCK } from "../schema/index.js";
 
-// Collapse an OpenAI content-part array: text-only parts become a newline-joined string,
-// otherwise the array is returned as-is.
-export function collapseTextParts(parts) {
-  if (
-    Array.isArray(parts) &&
-    parts.length > 0 &&
-    parts.every((p) => p?.type === OPENAI_BLOCK.TEXT && !p?.cache_control)
-  ) {
-    return parts.map((p) => p.text ?? "").join("\n");
-  }
-  return parts;
+// Collapse an OpenAI content-part array: a lone text part becomes a plain string,
+// otherwise the array is returned as-is. Cache-aware targets retain marked blocks.
+export function collapseTextParts(parts, opts = {}) {
+  return parts.length === 1 && parts[0].type === OPENAI_BLOCK.TEXT
+    && !(opts.preserveCacheControl && parts[0].cache_control) ? parts[0].text : parts;
 }
