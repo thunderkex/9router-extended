@@ -522,8 +522,7 @@ function checkForUpdate() {
       if (resolved) return;
       resolved = true;
       clearTimeout(safetyTimeout);
-      spinner.stop();
-      resolve(version);
+      resolve(res);
     };
 
     const localMd5 = getCliLocalMd5();

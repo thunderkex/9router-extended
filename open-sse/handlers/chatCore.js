@@ -443,7 +443,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       injectGenericPrompt(translatedBody, finalFormat, skill.prompt);
       xf.push(`${skill.id.toUpperCase()}:ON`);
     }
-  if (customPromptEnabled && injectCustomPrompt(translatedBody, finalFormat, customPrompt)) {
+  }
+
+  if (tokenSaverEnabled && customPromptEnabled && injectCustomPrompt(translatedBody, finalFormat, customPrompt)) {
     xf.push(`CUSTOMPROMPT:${customPrompt.trim().length}c`);
   }
 

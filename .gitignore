@@ -106,3 +106,4 @@ graphify-out/
 start-dev-silent.cjs
 debug.log
 .scratch/
+bun.lock

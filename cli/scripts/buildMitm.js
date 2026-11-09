@@ -1,4 +1,15 @@
-const esbuild = require("esbuild");
+let esbuild;
+try {
+  esbuild = require("esbuild");
+} catch {
+  try {
+    const rootDir = path.resolve(__dirname, "..", "..");
+    esbuild = require(path.join(rootDir, "node_modules", "esbuild"));
+  } catch {
+    console.error("❌ 'esbuild' module not found. Run 'bun install' or 'npm install' inside the cli/ directory.");
+    process.exit(1);
+  }
+}
 const fs = require("fs");
 const path = require("path");
 
