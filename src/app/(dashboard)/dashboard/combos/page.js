@@ -459,7 +459,7 @@ export default function CombosPage() {
             {" "}Note: Cursor IDE itself often blocks built-in Composer / Grok from Override OpenAI Base URL (&quot;model does not support custom API&quot;); add them via Cursor&apos;s <span className="font-medium text-text-main">Add Custom Model</span> using the combo name, or pick a model Cursor allows through the custom endpoint.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-stretch">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
           <div className="relative w-full sm:w-64">
             <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-text-muted">
               search
@@ -483,9 +483,6 @@ export default function CombosPage() {
               </button>
             )}
           </div>
-          <Button icon="add" onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto whitespace-nowrap">
-            Create Combo
-          </Button>
           <div className="hidden">
             <Button
               variant="secondary"
@@ -510,8 +507,6 @@ export default function CombosPage() {
               Claude Default
             </Button>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <Button variant="secondary" icon="auto_awesome" onClick={handleOpenSuggestModal} className="w-full sm:w-auto whitespace-nowrap">
             Auto-Suggest Combo
           </Button>
