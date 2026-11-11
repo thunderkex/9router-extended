@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createProviderConnection } from "@/models";
+import { extractCodexAccountInfo } from "@/lib/oauth/providerHelpers";
 
 export const dynamic = "force-dynamic";
 
