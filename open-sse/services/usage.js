@@ -26,6 +26,9 @@ import { resolveQoderCredentials } from "./qoderModels.js";
 import { getGlmUsage } from "./usage/glm.js";
 import { getFreebuffUsage } from "./usage/freebuff.js";
 import { getCommandCodeUsage } from "./usage/commandcode.js";
+import { getSyntheticUsage } from "./usage/synthetic.js";
+import { getDeepRelayUsage } from "./usage/deeprelay.js";
+import { getOpenDesignUsage } from "./usage/opendesign.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -71,6 +74,9 @@ const USAGE_HANDLERS = {
   freebuff: (c) => getFreebuffUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   "xiaomi-mimo": (c) => getXiaomiMimoUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   commandcode: (c) => getCommandCodeUsage(c.apiKey, c.proxyOptions),
+  synthetic: (c) => getSyntheticUsage(c.apiKey, c.proxyOptions),
+  deeprelay: (c) => getDeepRelayUsage(c.apiKey, c.proxyOptions),
+  "opendesign-go": (c) => getOpenDesignUsage(c),
   cursor: (c) => getCursorUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   // OAuth WorkOS JWT (workos: prefix) or plain ClinePass API key — same usage-limits URL.
   clinepass: (c) => getClinepassUsage(c.accessToken, c.apiKey, c.proxyOptions),
