@@ -1033,9 +1033,11 @@ export default function TokenSaverClient() {
             onChange={() => handleReaAllowEnabled(!reaAllowEnabled)}
           />
         </div>
-        {/* PXPIPE hidden from UI — experimental, not exposed to users yet */}
-        {false && (
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
+      </Card>
+
+      {/* Context Window Trimmer & Prompt Dedup */}
+      <Card id="trimmer">
+        <div className="flex items-center justify-between py-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-base font-semibold flex items-center gap-2">
